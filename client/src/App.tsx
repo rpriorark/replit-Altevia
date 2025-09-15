@@ -12,6 +12,8 @@ import LandingPage from "@/components/LandingPage";
 import Dashboard from "@/components/Dashboard";
 import SEOGenerator from "@/components/SEOGenerator";
 import ReviewsManager from "@/components/ReviewsManager";
+import Analytics from "@/components/Analytics";
+import AISuggestions from "@/components/AISuggestions";
 import NotFound from "@/pages/not-found";
 
 function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -55,19 +57,13 @@ function Router() {
       
       <Route path="/analytics">
         <DashboardLayout>
-          <div className="text-center py-12">
-            <h1 className="text-3xl font-bold mb-4">Analytics</h1>
-            <p className="text-muted-foreground">Panel de métricas detalladas (próximamente)</p>
-          </div>
+          <Analytics />
         </DashboardLayout>
       </Route>
       
       <Route path="/suggestions">
         <DashboardLayout>
-          <div className="text-center py-12">
-            <h1 className="text-3xl font-bold mb-4">Sugerencias IA</h1>
-            <p className="text-muted-foreground">Recomendaciones inteligentes (próximamente)</p>
-          </div>
+          <AISuggestions />
         </DashboardLayout>
       </Route>
       
