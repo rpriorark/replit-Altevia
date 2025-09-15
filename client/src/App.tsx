@@ -2,7 +2,6 @@ import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -14,6 +13,9 @@ import SEOGenerator from "@/components/SEOGenerator";
 import ReviewsManager from "@/components/ReviewsManager";
 import Analytics from "@/components/Analytics";
 import AISuggestions from "@/components/AISuggestions";
+import Billing from "@/components/Billing";
+import Team from "@/components/Team";
+import Settings from "@/components/Settings";
 import NotFound from "@/pages/not-found";
 
 function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -69,28 +71,19 @@ function Router() {
       
       <Route path="/billing">
         <DashboardLayout>
-          <div className="text-center py-12">
-            <h1 className="text-3xl font-bold mb-4">Plan y Facturación</h1>
-            <p className="text-muted-foreground">Gestión de suscripción (próximamente)</p>
-          </div>
+          <Billing />
         </DashboardLayout>
       </Route>
       
       <Route path="/team">
         <DashboardLayout>
-          <div className="text-center py-12">
-            <h1 className="text-3xl font-bold mb-4">Equipo</h1>
-            <p className="text-muted-foreground">Gestión de usuarios (próximamente)</p>
-          </div>
+          <Team />
         </DashboardLayout>
       </Route>
       
       <Route path="/settings">
         <DashboardLayout>
-          <div className="text-center py-12">
-            <h1 className="text-3xl font-bold mb-4">Configuración</h1>
-            <p className="text-muted-foreground">Ajustes de la aplicación (próximamente)</p>
-          </div>
+          <Settings />
         </DashboardLayout>
       </Route>
       
@@ -109,15 +102,13 @@ export default function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <SidebarProvider style={sidebarStyle as React.CSSProperties}>
-          <div className="flex h-screen w-full">
-            <AppSidebar />
-            <Router />
-          </div>
-        </SidebarProvider>
-        <Toaster />
-      </TooltipProvider>
+      <SidebarProvider style={sidebarStyle as React.CSSProperties}>
+        <div className="flex h-screen w-full">
+          <AppSidebar />
+          <Router />
+        </div>
+      </SidebarProvider>
+      <Toaster />
     </QueryClientProvider>
   );
 }
