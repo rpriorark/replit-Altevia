@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Eye, TrendingUp, MessageSquare, BarChart3, Zap, Shield } from "lucide-react";
 import heroImage from "@assets/generated_images/Hero_section_image_19f86e27.png";
 import dashboardMockup from "@assets/generated_images/Dashboard_analytics_mockup_cf3ad6f5.png";
-import visibiliaLogo from "@assets/generated_images/Visibilia_logo_design_d463efcc.png";
+import alteviaLogo from "@assets/generated_images/Altevia_logo_design_2c146ee7.png";
 
 const LandingPage = () => {
   return (
@@ -13,8 +13,8 @@ const LandingPage = () => {
       <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <img src={visibiliaLogo} alt="Visibilia" className="h-8 w-8" />
-            <span className="text-xl font-semibold">Visibilia</span>
+            <img src={alteviaLogo} alt="Altevia" className="h-8 w-8" />
+            <span className="text-xl font-semibold">Altevia</span>
           </div>
           <nav className="hidden md:flex items-center gap-6">
             <a href="#features" className="text-muted-foreground hover:text-foreground transition-colors">Características</a>
@@ -63,7 +63,7 @@ const LandingPage = () => {
             <div className="relative">
               <img 
                 src={heroImage} 
-                alt="Dashboard de Visibilia mostrando métricas de crecimiento" 
+                alt="Dashboard de Altevia mostrando métricas de crecimiento" 
                 className="rounded-lg shadow-2xl"
               />
             </div>
@@ -137,7 +137,7 @@ const LandingPage = () => {
           <div className="max-w-5xl mx-auto">
             <img 
               src={dashboardMockup} 
-              alt="Dashboard completo de Visibilia" 
+              alt="Dashboard completo de Altevia" 
               className="rounded-lg shadow-2xl border"
             />
           </div>
@@ -225,8 +225,8 @@ const LandingPage = () => {
         <div className="container mx-auto px-4">
           <div className="flex flex-col items-center text-center">
             <div className="flex items-center gap-2 mb-4">
-              <img src={visibiliaLogo} alt="Visibilia" className="h-6 w-6" />
-              <span className="text-lg font-semibold">Visibilia</span>
+              <img src={alteviaLogo} alt="Altevia" className="h-6 w-6" />
+              <span className="text-lg font-semibold">Altevia</span>
             </div>
             <p className="text-muted-foreground mb-4">
               Transformando la visibilidad digital de negocios locales

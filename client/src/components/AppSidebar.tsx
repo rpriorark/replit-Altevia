@@ -19,7 +19,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { Link, useLocation } from "wouter";
-import visibiliaLogo from "@assets/generated_images/Visibilia_logo_design_d463efcc.png";
+import alteviaLogo from "@assets/generated_images/Altevia_logo_design_2c146ee7.png";
 
 const menuItems = [
   {
@@ -76,8 +76,8 @@ export function AppSidebar() {
         {/* Header */}
         <SidebarGroup>
           <div className="flex items-center gap-2 px-4 py-2">
-            <img src={visibiliaLogo} alt="Visibilia" className="h-8 w-8" />
-            <span className="text-lg font-semibold">Visibilia</span>
+            <img src={alteviaLogo} alt="Altevia" className="h-8 w-8" />
+            <span className="text-lg font-semibold">Altevia</span>
           </div>
         </SidebarGroup>
 

@@ -1,4 +1,4 @@
-# Visibilia - Plataforma SaaS de Visibilidad Digital
+# Altevia - Plataforma SaaS de Visibilidad Digital
 ## Guías de Diseño Completas
 
 ## Enfoque de Diseño Seleccionado
@@ -48,7 +48,7 @@
 ### D. Librería de Componentes
 
 **Navegación:**
-- Header con logo Visibilia, navegación horizontal y avatar de usuario
+- Header con logo Altevia, navegación horizontal y avatar de usuario
 - Sidebar colapsible para dashboard con iconos de módulos principales
 
 **Elementos de Datos:**
