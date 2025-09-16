@@ -7,7 +7,8 @@ import {
   CreditCard,
   Users,
   Lightbulb,
-  Calendar
+  Calendar,
+  Shield
 } from "lucide-react";
 import {
   Sidebar,
@@ -42,6 +43,11 @@ const menuItems = [
     title: "Gestión de Reseñas",
     url: "/reviews",
     icon: MessageSquare,
+  },
+  {
+    title: "Reputación Predictiva",
+    url: "/predictive-reputation",
+    icon: Shield,
   },
   {
     title: "Analytics",

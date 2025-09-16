@@ -15,6 +15,7 @@ import { ReviewManager } from "@/components/ReviewManager";
 import { MultiLocationDashboard } from "@/components/MultiLocationDashboard";
 import Analytics from "@/components/Analytics";
 import AISuggestions from "@/components/AISuggestions";
+import { PredictiveReputation } from "@/components/PredictiveReputation";
 import Billing from "@/components/Billing";
 import Team from "@/components/Team";
 import Settings from "@/components/Settings";
@@ -80,6 +81,12 @@ function Router() {
       <Route path="/suggestions">
         <DashboardLayout>
           <AISuggestions />
+        </DashboardLayout>
+      </Route>
+      
+      <Route path="/predictive-reputation">
+        <DashboardLayout>
+          <PredictiveReputation />
         </DashboardLayout>
       </Route>
       

@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { openaiService } from "./services/openai";
+import { ReputationAnalysisService, type RiskScoreComponents } from "./services/reputation";
 import { 
   generateSEOContentSchema, 
   generateGMBPostSchema, 
@@ -13,11 +14,37 @@ import {
   updatePostStatusSchema,
   editPostContentSchema,
   bulkApprovePostsSchema,
-  generateSeasonalContentSchema
+  generateSeasonalContentSchema,
+  runReputationAnalysisSchema,
+  getReputationScoreSchema,
+  getReputationTrendsSchema,
+  getReputationAlertsSchema,
+  ingestReviewsSchema,
+  updateThresholdSchema,
+  acknowledgeAlertsSchema
 } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 
+// Helper function to map service components to UI expected format
+function mapComponentsForUI(serviceComponents: RiskScoreComponents): {
+  rating: number;
+  volume: number;
+  sentiment: number;
+  recency: number;
+  response: number;
+} {
+  return {
+    rating: Math.max(0, 100 - serviceComponents.negativeReviewVelocity), // Invert: fewer negative reviews = better rating
+    volume: Math.max(0, 100 - serviceComponents.engagementDrop), // Invert: less engagement drop = better volume
+    sentiment: Math.max(0, 100 - serviceComponents.sentimentDrift), // Invert: less sentiment drift = better sentiment
+    recency: Math.max(0, 100 - serviceComponents.competitorGap), // Invert: smaller competitor gap = better recency positioning
+    response: Math.max(0, 100 - serviceComponents.responseLatency) // Invert: faster response = better response score
+  };
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Initialize reputation analysis service
+  const reputationService = new ReputationAnalysisService(storage);
   // SEO Content Generation Routes
   app.post("/api/seo/generate-content", async (req, res) => {
     try {
@@ -883,6 +910,539 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error fetching locations:", error);
       res.status(500).json({
         error: "Failed to fetch locations",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Reputation Module Routes
+
+  // Run reputation analysis for a location
+  app.post("/api/reputation/run", async (req, res) => {
+    try {
+      const validationResult = runReputationAnalysisSchema.safeParse(req.body);
+      
+      if (!validationResult.success) {
+        return res.status(400).json({
+          error: "Validation failed",
+          details: fromZodError(validationResult.error).toString()
+        });
+      }
+
+      const { locationId, windowDays } = validationResult.data;
+
+      // Check if location exists
+      const location = await storage.getLocationById(locationId);
+      if (!location) {
+        return res.status(404).json({
+          error: "Location not found",
+          details: `Location with ID ${locationId} does not exist`
+        });
+      }
+
+      // Run comprehensive reputation analysis
+      const analysisResult = await reputationService.calculateReputationScore(locationId, windowDays);
+
+      // Persist the reputation score
+      await storage.createReputationScore({
+        locationId,
+        score: analysisResult.score,
+        components: JSON.stringify(analysisResult.components),
+        trend: analysisResult.trend.trend,
+        previousScore: null // Will be set by the service if there's a previous score
+      });
+
+      // Persist any new alerts
+      for (const alert of analysisResult.alerts) {
+        await storage.createReputationAlert({
+          locationId,
+          alertType: alert.type,
+          severity: alert.severity,
+          score: analysisResult.score,
+          reasonCode: alert.reasonCode,
+          message: alert.message,
+          metadata: alert.metadata ? JSON.stringify(alert.metadata) : null,
+          acknowledged: false
+        });
+      }
+
+      res.json(analysisResult);
+    } catch (error) {
+      console.error("Error running reputation analysis:", error);
+      if (error instanceof Error && error.message.includes("Invalid locationId")) {
+        return res.status(400).json({
+          error: "Invalid location ID",
+          details: error.message
+        });
+      }
+      if (error instanceof Error && error.message.includes("Invalid windowDays")) {
+        return res.status(400).json({
+          error: "Invalid window days",
+          details: error.message
+        });
+      }
+      res.status(500).json({
+        error: "Failed to run reputation analysis",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Get latest reputation score for a location
+  app.get("/api/reputation/score", async (req, res) => {
+    try {
+      const validationResult = getReputationScoreSchema.safeParse(req.query);
+      
+      if (!validationResult.success) {
+        return res.status(400).json({
+          error: "Validation failed",
+          details: fromZodError(validationResult.error).toString()
+        });
+      }
+
+      const { locationId } = validationResult.data;
+
+      // Check if location exists
+      const location = await storage.getLocationById(locationId);
+      if (!location) {
+        return res.status(404).json({
+          error: "Location not found",
+          details: `Location with ID ${locationId} does not exist`
+        });
+      }
+
+      // Get latest reputation score
+      const latestScore = await storage.getLatestReputationScore(locationId);
+      if (!latestScore) {
+        return res.status(404).json({
+          error: "No reputation score found",
+          details: `No reputation analysis has been run for location ${locationId}. Run analysis first.`
+        });
+      }
+
+      // Get score history for trends
+      const scoreHistory = await storage.getReputationScoreHistory(locationId, 90);
+
+      // Parse components JSON and map to UI format
+      const serviceComponents = JSON.parse(latestScore.components) as RiskScoreComponents;
+      const components = mapComponentsForUI(serviceComponents);
+
+      const response = {
+        score: latestScore.score,
+        components,
+        trend: latestScore.trend,
+        previousScore: latestScore.previousScore,
+        calculatedAt: latestScore.calculatedAt,
+        history: scoreHistory.slice(0, 30) // Last 30 scores for trend visualization
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error("Error fetching reputation score:", error);
+      res.status(500).json({
+        error: "Failed to fetch reputation score",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Get reputation trends analysis
+  app.get("/api/reputation/trends", async (req, res) => {
+    try {
+      const validationResult = getReputationTrendsSchema.safeParse(req.query);
+      
+      if (!validationResult.success) {
+        return res.status(400).json({
+          error: "Validation failed",
+          details: fromZodError(validationResult.error).toString()
+        });
+      }
+
+      const { locationId, windowDays } = validationResult.data;
+
+      // Check if location exists
+      const location = await storage.getLocationById(locationId);
+      if (!location) {
+        return res.status(404).json({
+          error: "Location not found",
+          details: `Location with ID ${locationId} does not exist`
+        });
+      }
+
+      // Get reputation score history
+      const scoreHistory = await storage.getReputationScoreHistory(locationId, windowDays);
+      
+      if (scoreHistory.length === 0) {
+        return res.status(404).json({
+          error: "No trend data found",
+          details: `No reputation analysis history found for location ${locationId}. Run analysis first.`
+        });
+      }
+
+      // Get recent reviews for sentiment analysis
+      const recentReviews = await storage.getRecentReviews(locationId, windowDays);
+
+      // Calculate trend metrics
+      const scores = scoreHistory.map(s => s.score);
+      const dates = scoreHistory.map(s => s.calculatedAt);
+      
+      // Map score history components to UI format
+      const mappedScoreHistory = scoreHistory.slice(0, 50).map(score => {
+        const serviceComponents = JSON.parse(score.components) as RiskScoreComponents;
+        const uiComponents = mapComponentsForUI(serviceComponents);
+        return {
+          id: score.id,
+          locationId: score.locationId,
+          score: score.score,
+          components: uiComponents,
+          trend: score.trend,
+          previousScore: score.previousScore,
+          calculatedAt: score.calculatedAt,
+          date: score.calculatedAt // For frontend compatibility
+        };
+      });
+
+      const trend = {
+        direction: scoreHistory.length > 1 ? 
+          (scoreHistory[0].score > scoreHistory[scoreHistory.length - 1].score ? 'improving' : 
+           scoreHistory[0].score < scoreHistory[scoreHistory.length - 1].score ? 'declining' : 'stable') : 'stable',
+        scoreHistory: mappedScoreHistory,
+        averageScore: scores.reduce((a, b) => a + b, 0) / scores.length,
+        scoreRange: {
+          min: Math.min(...scores),
+          max: Math.max(...scores)
+        },
+        reviewMetrics: {
+          totalReviews: recentReviews.length,
+          averageRating: recentReviews.length > 0 ? 
+            recentReviews.reduce((sum, r) => sum + r.rating, 0) / recentReviews.length : 0,
+          negativeReviews: recentReviews.filter(r => r.rating <= 2).length,
+          positiveReviews: recentReviews.filter(r => r.rating >= 4).length
+        },
+        timeline: {
+          windowDays,
+          startDate: dates[dates.length - 1],
+          endDate: dates[0]
+        }
+      };
+
+      res.json(trend);
+    } catch (error) {
+      console.error("Error fetching reputation trends:", error);
+      res.status(500).json({
+        error: "Failed to fetch reputation trends",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Get reputation alerts with filtering
+  app.get("/api/reputation/alerts", async (req, res) => {
+    try {
+      const validationResult = getReputationAlertsSchema.safeParse(req.query);
+      
+      if (!validationResult.success) {
+        return res.status(400).json({
+          error: "Validation failed",
+          details: fromZodError(validationResult.error).toString()
+        });
+      }
+
+      const { locationId, acknowledged, severity, limit } = validationResult.data;
+
+      // Check if location exists
+      const location = await storage.getLocationById(locationId);
+      if (!location) {
+        return res.status(404).json({
+          error: "Location not found",
+          details: `Location with ID ${locationId} does not exist`
+        });
+      }
+
+      // Get alerts based on filters
+      let alerts;
+      if (acknowledged === false) {
+        alerts = await storage.getUnacknowledgedAlerts(locationId);
+      } else {
+        alerts = await storage.getRecentAlerts(locationId, 30); // Default to last 30 days
+      }
+
+      // Apply additional filters
+      if (severity) {
+        alerts = alerts.filter(alert => alert.severity === severity);
+      }
+
+      if (acknowledged !== undefined) {
+        alerts = alerts.filter(alert => alert.acknowledged === acknowledged);
+      }
+
+      // Limit results
+      const limitedAlerts = alerts.slice(0, limit);
+
+      // Parse metadata for each alert
+      const enrichedAlerts = limitedAlerts.map(alert => ({
+        ...alert,
+        metadata: alert.metadata ? JSON.parse(alert.metadata) : null
+      }));
+
+      const response = {
+        alerts: enrichedAlerts,
+        total: alerts.length,
+        showing: limitedAlerts.length,
+        filters: {
+          locationId,
+          acknowledged,
+          severity,
+          limit
+        }
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error("Error fetching reputation alerts:", error);
+      res.status(500).json({
+        error: "Failed to fetch reputation alerts",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Acknowledge a reputation alert
+  app.post("/api/reputation/alerts/:id/ack", async (req, res) => {
+    try {
+      const alertId = req.params.id;
+      if (!alertId) {
+        return res.status(400).json({
+          error: "Alert ID is required",
+          details: "Alert ID must be provided in the URL path"
+        });
+      }
+
+      // TODO: Get user from authentication session
+      const acknowledgedBy = req.body.acknowledgedBy || "system"; // Fallback for now
+
+      const acknowledgedAlert = await storage.acknowledgeAlert(alertId, acknowledgedBy);
+      
+      if (!acknowledgedAlert) {
+        return res.status(404).json({
+          error: "Alert not found",
+          details: `Alert with ID ${alertId} does not exist`
+        });
+      }
+
+      // Parse metadata if present
+      const response = {
+        ...acknowledgedAlert,
+        metadata: acknowledgedAlert.metadata ? JSON.parse(acknowledgedAlert.metadata) : null
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error("Error acknowledging alert:", error);
+      res.status(500).json({
+        error: "Failed to acknowledge alert",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Threshold Management Routes
+  
+  // Get threshold for a location
+  app.get("/api/reputation/thresholds/:locationId", async (req, res) => {
+    try {
+      const { locationId } = req.params;
+      
+      if (!locationId) {
+        return res.status(400).json({
+          error: "Location ID is required",
+          details: "Location ID must be provided in the URL path"
+        });
+      }
+
+      // Check if location exists
+      const location = await storage.getLocationById(locationId);
+      if (!location) {
+        return res.status(404).json({
+          error: "Location not found",
+          details: `Location with ID ${locationId} does not exist`
+        });
+      }
+
+      const threshold = await storage.getLocationThreshold(locationId);
+      
+      res.json({
+        locationId,
+        threshold,
+        location: {
+          name: location.name,
+          businessName: location.businessId // Will be populated with actual business name later
+        }
+      });
+    } catch (error) {
+      console.error("Error fetching threshold:", error);
+      res.status(500).json({
+        error: "Failed to fetch threshold",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Update threshold for a location
+  app.put("/api/reputation/thresholds/:locationId", async (req, res) => {
+    try {
+      const { locationId } = req.params;
+      
+      if (!locationId) {
+        return res.status(400).json({
+          error: "Location ID is required",
+          details: "Location ID must be provided in the URL path"
+        });
+      }
+
+      const validationResult = updateThresholdSchema.safeParse(req.body);
+      
+      if (!validationResult.success) {
+        return res.status(400).json({
+          error: "Validation failed",
+          details: fromZodError(validationResult.error).toString()
+        });
+      }
+
+      const { threshold } = validationResult.data;
+
+      // Check if location exists
+      const location = await storage.getLocationById(locationId);
+      if (!location) {
+        return res.status(404).json({
+          error: "Location not found",
+          details: `Location with ID ${locationId} does not exist`
+        });
+      }
+
+      await storage.setLocationThreshold(locationId, threshold);
+      
+      res.json({
+        locationId,
+        threshold,
+        message: `Threshold updated successfully to ${threshold}`,
+        location: {
+          name: location.name,
+          businessName: location.businessId
+        }
+      });
+    } catch (error) {
+      console.error("Error updating threshold:", error);
+      if (error instanceof Error && (error.message.includes("Threshold must be between") || error.message.includes("Location with ID"))) {
+        return res.status(400).json({
+          error: "Invalid input",
+          details: error.message
+        });
+      }
+      res.status(500).json({
+        error: "Failed to update threshold",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Bulk acknowledge alerts
+  app.post("/api/reputation/alerts/acknowledge", async (req, res) => {
+    try {
+      const validationResult = acknowledgeAlertsSchema.safeParse(req.body);
+      
+      if (!validationResult.success) {
+        return res.status(400).json({
+          error: "Validation failed",
+          details: fromZodError(validationResult.error).toString()
+        });
+      }
+
+      const { alertIds, acknowledgedBy } = validationResult.data;
+
+      // TODO: Get user from authentication session
+      const acknowledger = acknowledgedBy || "system"; // Fallback for now
+
+      const acknowledgedAlerts = await storage.bulkAcknowledgeAlerts(alertIds, acknowledger);
+      
+      if (acknowledgedAlerts.length === 0) {
+        return res.status(404).json({
+          error: "No alerts acknowledged",
+          details: "None of the provided alert IDs were found or could be acknowledged"
+        });
+      }
+
+      // Parse metadata for each acknowledged alert
+      const enrichedAlerts = acknowledgedAlerts.map(alert => ({
+        ...alert,
+        metadata: alert.metadata ? JSON.parse(alert.metadata) : null
+      }));
+
+      res.json({
+        message: `Successfully acknowledged ${acknowledgedAlerts.length} alert(s)`,
+        acknowledged: acknowledgedAlerts.length,
+        total: alertIds.length,
+        alerts: enrichedAlerts
+      });
+    } catch (error) {
+      console.error("Error acknowledging alerts:", error);
+      res.status(500).json({
+        error: "Failed to acknowledge alerts",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Optional: Ingest reviews for testing/seeding
+  app.post("/api/reviews/ingest", async (req, res) => {
+    try {
+      const validationResult = ingestReviewsSchema.safeParse(req.body);
+      
+      if (!validationResult.success) {
+        return res.status(400).json({
+          error: "Validation failed",
+          details: fromZodError(validationResult.error).toString()
+        });
+      }
+
+      const { locationId, reviews } = validationResult.data;
+
+      // Check if location exists
+      const location = await storage.getLocationById(locationId);
+      if (!location) {
+        return res.status(404).json({
+          error: "Location not found",
+          details: `Location with ID ${locationId} does not exist`
+        });
+      }
+
+      // Ingest reviews
+      const createdReviews = [];
+      for (const reviewData of reviews) {
+        const createdReview = await storage.createReview({
+          locationId,
+          rating: reviewData.rating,
+          text: reviewData.text,
+          reviewerName: reviewData.reviewerName || null,
+          platform: reviewData.platform || 'google',
+          externalId: reviewData.externalId || null,
+          respondedAt: reviewData.respondedAt ? new Date(reviewData.respondedAt) : null
+        });
+        createdReviews.push(createdReview);
+      }
+
+      const response = {
+        message: `Successfully ingested ${createdReviews.length} reviews`,
+        locationId,
+        reviewsCreated: createdReviews.length,
+        reviews: createdReviews.slice(0, 5) // Show first 5 for confirmation
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error("Error ingesting reviews:", error);
+      res.status(500).json({
+        error: "Failed to ingest reviews",
         details: error instanceof Error ? error.message : "Unknown error"
       });
     }

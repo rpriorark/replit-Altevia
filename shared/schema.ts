@@ -86,6 +86,10 @@ export const locationsRelations = relations(locations, ({ one, many }) => ({
   seoProjects: many(seoProjects),
   contentCalendarPosts: many(contentCalendarPosts),
   postingSchedules: many(postingSchedules),
+  reviews: many(reviews),
+  competitorSnapshots: many(competitorSnapshots),
+  reputationScores: many(reputationScores),
+  reputationAlerts: many(reputationAlerts),
 }));
 
 export const seoProjectsRelations = relations(seoProjects, ({ one }) => ({
@@ -169,6 +173,85 @@ export const postingSchedulesRelations = relations(postingSchedules, ({ one }) =
   }),
 }));
 
+// Predictive Reputation Module Tables
+export const reviews = pgTable("reviews", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  locationId: varchar("location_id").notNull().references(() => locations.id),
+  rating: integer("rating").notNull(), // 1-5 star rating
+  text: text("text").notNull(),
+  reviewerName: varchar("reviewer_name", { length: 255 }),
+  platform: varchar("platform", { length: 50 }).notNull().default('google'), // 'google', 'facebook', 'yelp', etc.
+  externalId: varchar("external_id", { length: 255 }), // Platform-specific review ID
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  respondedAt: timestamp("responded_at"), // When business responded to review
+});
+
+export const competitorSnapshots = pgTable("competitor_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  locationId: varchar("location_id").notNull().references(() => locations.id),
+  competitorName: varchar("competitor_name", { length: 255 }).notNull(),
+  avgRating: decimal("avg_rating", { precision: 3, scale: 2 }).notNull(),
+  reviewCount: integer("review_count").notNull().default(0),
+  last30dNegPct: decimal("last_30d_neg_pct", { precision: 5, scale: 2 }).default('0'), // Percentage of negative reviews in last 30 days
+  engagementRate: decimal("engagement_rate", { precision: 5, scale: 2 }).default('0'), // Response rate to reviews
+  marketSharePct: decimal("market_share_pct", { precision: 5, scale: 2 }).default('0'), // Estimated market share percentage
+  capturedAt: timestamp("captured_at").notNull().default(sql`now()`)
+});
+
+export const reputationScores = pgTable("reputation_scores", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  locationId: varchar("location_id").notNull().references(() => locations.id),
+  score: integer("score").notNull(), // Overall reputation score 0-100
+  components: text("components").notNull(), // JSON object with score breakdown: {rating: 85, volume: 70, sentiment: 90, recency: 80, response: 95}
+  trend: varchar("trend", { length: 20 }).notNull().default('stable'), // 'improving', 'declining', 'stable'
+  previousScore: integer("previous_score"), // Score from previous calculation
+  calculatedAt: timestamp("calculated_at").notNull().default(sql`now()`)
+});
+
+export const reputationAlerts = pgTable("reputation_alerts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  locationId: varchar("location_id").notNull().references(() => locations.id),
+  alertType: varchar("alert_type", { length: 50 }).notNull(), // 'score_drop', 'negative_review', 'competitor_surge', 'response_needed'
+  severity: varchar("severity", { length: 20 }).notNull().default('medium'), // 'low', 'medium', 'high', 'critical'
+  score: integer("score"), // Current reputation score when alert was triggered
+  reasonCode: varchar("reason_code", { length: 100 }).notNull(),
+  message: text("message").notNull(),
+  metadata: text("metadata"), // JSON with additional alert context
+  acknowledged: boolean("acknowledged").notNull().default(false),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  acknowledgedBy: varchar("acknowledged_by", { length: 255 }),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`)
+});
+
+// Reputation Module Relations
+export const reviewsRelations = relations(reviews, ({ one }) => ({
+  location: one(locations, {
+    fields: [reviews.locationId],
+    references: [locations.id],
+  }),
+}));
+
+export const competitorSnapshotsRelations = relations(competitorSnapshots, ({ one }) => ({
+  location: one(locations, {
+    fields: [competitorSnapshots.locationId],
+    references: [locations.id],
+  }),
+}));
+
+export const reputationScoresRelations = relations(reputationScores, ({ one }) => ({
+  location: one(locations, {
+    fields: [reputationScores.locationId],
+    references: [locations.id],
+  }),
+}));
+
+export const reputationAlertsRelations = relations(reputationAlerts, ({ one }) => ({
+  location: one(locations, {
+    fields: [reputationAlerts.locationId],
+    references: [locations.id],
+  }),
+}));
+
 
 // Insert schemas
 export const insertBusinessSchema = createInsertSchema(businesses).omit({
@@ -207,6 +290,27 @@ export const insertPostingScheduleSchema = createInsertSchema(postingSchedules).
   updatedAt: true,
 });
 
+// Reputation Module Insert Schemas
+export const insertReviewSchema = createInsertSchema(reviews).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertCompetitorSnapshotSchema = createInsertSchema(competitorSnapshots).omit({
+  id: true,
+  capturedAt: true,
+});
+
+export const insertReputationScoreSchema = createInsertSchema(reputationScores).omit({
+  id: true,
+  calculatedAt: true,
+});
+
+export const insertReputationAlertSchema = createInsertSchema(reputationAlerts).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type InsertBusiness = z.infer<typeof insertBusinessSchema>;
 export type Business = typeof businesses.$inferSelect;
 export type InsertLocation = z.infer<typeof insertLocationSchema>;
@@ -219,6 +323,16 @@ export type InsertContentTemplate = z.infer<typeof insertContentTemplateSchema>;
 export type ContentTemplate = typeof contentTemplates.$inferSelect;
 export type InsertPostingSchedule = z.infer<typeof insertPostingScheduleSchema>;
 export type PostingSchedule = typeof postingSchedules.$inferSelect;
+
+// Reputation Module Types
+export type InsertReview = z.infer<typeof insertReviewSchema>;
+export type Review = typeof reviews.$inferSelect;
+export type InsertCompetitorSnapshot = z.infer<typeof insertCompetitorSnapshotSchema>;
+export type CompetitorSnapshot = typeof competitorSnapshots.$inferSelect;
+export type InsertReputationScore = z.infer<typeof insertReputationScoreSchema>;
+export type ReputationScore = typeof reputationScores.$inferSelect;
+export type InsertReputationAlert = z.infer<typeof insertReputationAlertSchema>;
+export type ReputationAlert = typeof reputationAlerts.$inferSelect;
 
 // SEO Content Generation Schemas
 export const generateSEOContentSchema = z.object({
@@ -346,3 +460,85 @@ export type UpdatePostStatusRequest = z.infer<typeof updatePostStatusSchema>;
 export type EditPostContentRequest = z.infer<typeof editPostContentSchema>;
 export type BulkApprovePostsRequest = z.infer<typeof bulkApprovePostsSchema>;
 export type GenerateSeasonalContentRequest = z.infer<typeof generateSeasonalContentSchema>;
+
+// Reputation Module API Schemas
+export const runReputationAnalysisSchema = z.object({
+  locationId: z.string().min(1, "Location ID is required"),
+  windowDays: z.number().min(1).max(365).optional().default(30)
+});
+
+export const getReputationScoreSchema = z.object({
+  locationId: z.string().min(1, "Location ID is required")
+});
+
+export const getReputationTrendsSchema = z.object({
+  locationId: z.string().min(1, "Location ID is required"),
+  windowDays: z.number().min(1).max(365).optional().default(30)
+});
+
+export const getReputationAlertsSchema = z.object({
+  locationId: z.string().min(1, "Location ID is required"),
+  acknowledged: z.boolean().optional(),
+  severity: z.enum(["low", "medium", "high", "critical"]).optional(),
+  limit: z.number().min(1).max(100).optional().default(20)
+});
+
+// Shared Alert Types Enum
+export const reputationAlertTypeEnum = z.enum([
+  'score_drop',
+  'negative_review', 
+  'competitor_surge',
+  'response_needed',
+  'system_error'
+]);
+
+export const reputationAlertSeverityEnum = z.enum([
+  'low',
+  'medium', 
+  'high',
+  'critical'
+]);
+
+export type ReputationAlertType = z.infer<typeof reputationAlertTypeEnum>;
+export type ReputationAlertSeverity = z.infer<typeof reputationAlertSeverityEnum>;
+
+export const ingestReviewsSchema = z.object({
+  locationId: z.string().min(1, "Location ID is required"),
+  reviews: z.array(z.object({
+    rating: z.number().min(1).max(5),
+    text: z.string().min(1, "Review text is required").max(2000),
+    reviewerName: z.string().max(255).optional(),
+    platform: z.string().max(50).optional().default('google'),
+    externalId: z.string().max(255).optional(),
+    createdAt: z.string().datetime().optional(),
+    respondedAt: z.string().datetime().optional()
+  })).min(1, "At least one review is required").max(100, "Cannot ingest more than 100 reviews at once")
+});
+
+// Threshold Management Schemas
+export const updateThresholdSchema = z.object({
+  threshold: z.number()
+    .min(0, "Threshold must be at least 0")
+    .max(100, "Threshold cannot exceed 100")
+    .int("Threshold must be a whole number")
+});
+
+export const getThresholdSchema = z.object({
+  locationId: z.string().min(1, "Location ID is required")
+});
+
+export const acknowledgeAlertsSchema = z.object({
+  alertIds: z.array(z.string().min(1, "Alert ID is required"))
+    .min(1, "At least one alert ID is required")
+    .max(50, "Cannot acknowledge more than 50 alerts at once"),
+  acknowledgedBy: z.string().max(255).optional()
+});
+
+export type RunReputationAnalysisRequest = z.infer<typeof runReputationAnalysisSchema>;
+export type GetReputationScoreRequest = z.infer<typeof getReputationScoreSchema>;
+export type GetReputationTrendsRequest = z.infer<typeof getReputationTrendsSchema>;
+export type GetReputationAlertsRequest = z.infer<typeof getReputationAlertsSchema>;
+export type IngestReviewsRequest = z.infer<typeof ingestReviewsSchema>;
+export type UpdateThresholdRequest = z.infer<typeof updateThresholdSchema>;
+export type GetThresholdRequest = z.infer<typeof getThresholdSchema>;
+export type AcknowledgeAlertsRequest = z.infer<typeof acknowledgeAlertsSchema>;

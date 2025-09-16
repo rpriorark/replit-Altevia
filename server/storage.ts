@@ -8,7 +8,15 @@ import {
   type ContentCalendarPost,
   type InsertContentCalendarPost,
   type PostingSchedule,
-  type InsertPostingSchedule
+  type InsertPostingSchedule,
+  type Review,
+  type InsertReview,
+  type CompetitorSnapshot,
+  type InsertCompetitorSnapshot,
+  type ReputationScore,
+  type InsertReputationScore,
+  type ReputationAlert,
+  type InsertReputationAlert
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 
@@ -48,6 +56,41 @@ export interface IStorage {
   // Posting Schedule methods
   getPostingSchedules(locationId: string): Promise<PostingSchedule[]>;
   createOrUpdatePostingSchedule(schedule: Omit<InsertPostingSchedule, 'id'>): Promise<PostingSchedule>;
+  
+  // Reputation Module methods
+  
+  // Review methods
+  createReview(review: Omit<InsertReview, 'id'>): Promise<Review>;
+  getReviewsByLocation(locationId: string, filters?: {
+    rating?: number;
+    platform?: string;
+    startDate?: Date;
+    endDate?: Date;
+    limit?: number;
+  }): Promise<Review[]>;
+  getRecentReviews(locationId: string, days?: number): Promise<Review[]>;
+  updateReviewResponse(reviewId: string, respondedAt: Date): Promise<Review | undefined>;
+  
+  // Competitor Snapshot methods  
+  createCompetitorSnapshot(snapshot: Omit<InsertCompetitorSnapshot, 'id'>): Promise<CompetitorSnapshot>;
+  getLatestCompetitorSnapshots(locationId: string): Promise<CompetitorSnapshot[]>;
+  getCompetitorHistory(locationId: string, competitorName: string, days?: number): Promise<CompetitorSnapshot[]>;
+  
+  // Reputation Score methods
+  createReputationScore(score: Omit<InsertReputationScore, 'id'>): Promise<ReputationScore>;
+  getLatestReputationScore(locationId: string): Promise<ReputationScore | undefined>;
+  getReputationScoreHistory(locationId: string, days?: number): Promise<ReputationScore[]>;
+  
+  // Reputation Alert methods
+  createReputationAlert(alert: Omit<InsertReputationAlert, 'id'>): Promise<ReputationAlert>;
+  getUnacknowledgedAlerts(locationId: string): Promise<ReputationAlert[]>;
+  getRecentAlerts(locationId: string, days?: number): Promise<ReputationAlert[]>;
+  acknowledgeAlert(alertId: string, acknowledgedBy?: string): Promise<ReputationAlert | undefined>;
+  bulkAcknowledgeAlerts(alertIds: string[], acknowledgedBy?: string): Promise<ReputationAlert[]>;
+  
+  // Threshold Management methods
+  setLocationThreshold(locationId: string, threshold: number): Promise<void>;
+  getLocationThreshold(locationId: string): Promise<number>;
 }
 
 export class MemStorage implements IStorage {
@@ -56,6 +99,13 @@ export class MemStorage implements IStorage {
   private locations: Map<string, Location>;
   private contentCalendarPosts: Map<string, ContentCalendarPost>;
   private postingSchedules: Map<string, PostingSchedule>;
+  // Reputation Module Maps
+  private reviews: Map<string, Review>;
+  private competitorSnapshots: Map<string, CompetitorSnapshot>;
+  private reputationScores: Map<string, ReputationScore>;
+  private reputationAlerts: Map<string, ReputationAlert>;
+  // Threshold Management Map
+  private locationThresholds: Map<string, number>;
 
   constructor() {
     this.users = new Map();
@@ -63,6 +113,13 @@ export class MemStorage implements IStorage {
     this.locations = new Map();
     this.contentCalendarPosts = new Map();
     this.postingSchedules = new Map();
+    // Initialize Reputation Module Maps
+    this.reviews = new Map();
+    this.competitorSnapshots = new Map();
+    this.reputationScores = new Map();
+    this.reputationAlerts = new Map();
+    // Initialize Threshold Management Map
+    this.locationThresholds = new Map();
 
     // Initialize with some mock data for testing
     this.initializeMockData();
@@ -309,6 +366,246 @@ export class MemStorage implements IStorage {
       this.postingSchedules.set(id, newSchedule);
       return newSchedule;
     }
+  }
+
+  // Reputation Module Methods
+  
+  // Review methods
+  async createReview(reviewData: Omit<InsertReview, 'id'>): Promise<Review> {
+    const id = randomUUID();
+    const review: Review = {
+      ...reviewData,
+      id,
+      reviewerName: reviewData.reviewerName || null,
+      externalId: reviewData.externalId || null,
+      createdAt: new Date(),
+      respondedAt: reviewData.respondedAt || null
+    };
+    this.reviews.set(id, review);
+    return review;
+  }
+
+  async getReviewsByLocation(locationId: string, filters?: {
+    rating?: number;
+    platform?: string;
+    startDate?: Date;
+    endDate?: Date;
+    limit?: number;
+  }): Promise<Review[]> {
+    let reviews = Array.from(this.reviews.values()).filter(
+      review => review.locationId === locationId
+    );
+
+    if (filters) {
+      if (filters.rating) {
+        reviews = reviews.filter(review => review.rating === filters.rating);
+      }
+      if (filters.platform) {
+        reviews = reviews.filter(review => review.platform === filters.platform);
+      }
+      if (filters.startDate) {
+        reviews = reviews.filter(review => 
+          new Date(review.createdAt) >= filters.startDate!
+        );
+      }
+      if (filters.endDate) {
+        reviews = reviews.filter(review => 
+          new Date(review.createdAt) <= filters.endDate!
+        );
+      }
+      if (filters.limit) {
+        reviews = reviews.slice(0, filters.limit);
+      }
+    }
+
+    return reviews.sort((a, b) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }
+
+  async getRecentReviews(locationId: string, days: number = 30): Promise<Review[]> {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    
+    return this.getReviewsByLocation(locationId, { startDate });
+  }
+
+  async updateReviewResponse(reviewId: string, respondedAt: Date): Promise<Review | undefined> {
+    const review = this.reviews.get(reviewId);
+    if (!review) return undefined;
+
+    const updatedReview: Review = {
+      ...review,
+      respondedAt
+    };
+    this.reviews.set(reviewId, updatedReview);
+    return updatedReview;
+  }
+
+  // Competitor Snapshot methods
+  async createCompetitorSnapshot(snapshotData: Omit<InsertCompetitorSnapshot, 'id'>): Promise<CompetitorSnapshot> {
+    const id = randomUUID();
+    const snapshot: CompetitorSnapshot = {
+      ...snapshotData,
+      id,
+      capturedAt: new Date()
+    };
+    this.competitorSnapshots.set(id, snapshot);
+    return snapshot;
+  }
+
+  async getLatestCompetitorSnapshots(locationId: string): Promise<CompetitorSnapshot[]> {
+    const snapshots = Array.from(this.competitorSnapshots.values()).filter(
+      snapshot => snapshot.locationId === locationId
+    );
+
+    // Group by competitor name and return latest for each
+    const latestByCompetitor = new Map<string, CompetitorSnapshot>();
+    snapshots.forEach(snapshot => {
+      const existing = latestByCompetitor.get(snapshot.competitorName);
+      if (!existing || new Date(snapshot.capturedAt) > new Date(existing.capturedAt)) {
+        latestByCompetitor.set(snapshot.competitorName, snapshot);
+      }
+    });
+
+    return Array.from(latestByCompetitor.values()).sort((a, b) => 
+      new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime()
+    );
+  }
+
+  async getCompetitorHistory(locationId: string, competitorName: string, days: number = 30): Promise<CompetitorSnapshot[]> {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    return Array.from(this.competitorSnapshots.values()).filter(
+      snapshot => snapshot.locationId === locationId && 
+                  snapshot.competitorName === competitorName &&
+                  new Date(snapshot.capturedAt) >= startDate
+    ).sort((a, b) => 
+      new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime()
+    );
+  }
+
+  // Reputation Score methods
+  async createReputationScore(scoreData: Omit<InsertReputationScore, 'id'>): Promise<ReputationScore> {
+    const id = randomUUID();
+    const score: ReputationScore = {
+      ...scoreData,
+      id,
+      previousScore: scoreData.previousScore || null,
+      calculatedAt: new Date()
+    };
+    this.reputationScores.set(id, score);
+    return score;
+  }
+
+  async getLatestReputationScore(locationId: string): Promise<ReputationScore | undefined> {
+    const scores = Array.from(this.reputationScores.values()).filter(
+      score => score.locationId === locationId
+    );
+
+    return scores.reduce((latest, current) => {
+      if (!latest || new Date(current.calculatedAt) > new Date(latest.calculatedAt)) {
+        return current;
+      }
+      return latest;
+    }, undefined as ReputationScore | undefined);
+  }
+
+  async getReputationScoreHistory(locationId: string, days: number = 30): Promise<ReputationScore[]> {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    return Array.from(this.reputationScores.values()).filter(
+      score => score.locationId === locationId &&
+               new Date(score.calculatedAt) >= startDate
+    ).sort((a, b) => 
+      new Date(b.calculatedAt).getTime() - new Date(a.calculatedAt).getTime()
+    );
+  }
+
+  // Reputation Alert methods
+  async createReputationAlert(alertData: Omit<InsertReputationAlert, 'id'>): Promise<ReputationAlert> {
+    const id = randomUUID();
+    const alert: ReputationAlert = {
+      ...alertData,
+      id,
+      score: alertData.score || null,
+      metadata: alertData.metadata || null,
+      acknowledgedAt: alertData.acknowledgedAt || null,
+      acknowledgedBy: alertData.acknowledgedBy || null,
+      createdAt: new Date()
+    };
+    this.reputationAlerts.set(id, alert);
+    return alert;
+  }
+
+  async getUnacknowledgedAlerts(locationId: string): Promise<ReputationAlert[]> {
+    return Array.from(this.reputationAlerts.values()).filter(
+      alert => alert.locationId === locationId && !alert.acknowledged
+    ).sort((a, b) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }
+
+  async getRecentAlerts(locationId: string, days: number = 7): Promise<ReputationAlert[]> {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    return Array.from(this.reputationAlerts.values()).filter(
+      alert => alert.locationId === locationId &&
+                new Date(alert.createdAt) >= startDate
+    ).sort((a, b) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }
+
+  async acknowledgeAlert(alertId: string, acknowledgedBy?: string): Promise<ReputationAlert | undefined> {
+    const alert = this.reputationAlerts.get(alertId);
+    if (!alert) return undefined;
+
+    const updatedAlert: ReputationAlert = {
+      ...alert,
+      acknowledged: true,
+      acknowledgedAt: new Date(),
+      acknowledgedBy: acknowledgedBy || null
+    };
+    this.reputationAlerts.set(alertId, updatedAlert);
+    return updatedAlert;
+  }
+
+  async bulkAcknowledgeAlerts(alertIds: string[], acknowledgedBy?: string): Promise<ReputationAlert[]> {
+    const updatedAlerts: ReputationAlert[] = [];
+
+    for (const alertId of alertIds) {
+      const alert = await this.acknowledgeAlert(alertId, acknowledgedBy);
+      if (alert) {
+        updatedAlerts.push(alert);
+      }
+    }
+
+    return updatedAlerts;
+  }
+
+  // Threshold Management methods
+  async setLocationThreshold(locationId: string, threshold: number): Promise<void> {
+    // Validate threshold value
+    if (threshold < 0 || threshold > 100) {
+      throw new Error('Threshold must be between 0 and 100');
+    }
+    
+    // Validate location exists
+    const location = await this.getLocationById(locationId);
+    if (!location) {
+      throw new Error(`Location with ID ${locationId} not found`);
+    }
+    
+    this.locationThresholds.set(locationId, threshold);
+  }
+
+  async getLocationThreshold(locationId: string): Promise<number> {
+    // Return stored threshold or default of 70
+    return this.locationThresholds.get(locationId) ?? 70;
   }
 }
 
