@@ -214,6 +214,105 @@ Responde en formato markdown con máximo 300 palabras.
       throw new Error("Failed to analyze local competitors");
     }
   }
+
+  async generateReviewResponse(
+    businessName: string,
+    businessType: string,
+    reviewText: string,
+    rating: number,
+    reviewerName?: string,
+    responseStyle: 'professional' | 'friendly' | 'concise' | 'detailed' = 'professional',
+    includeApology: boolean = false,
+    includeCallToAction: boolean = true,
+    customInstructions?: string
+  ): Promise<string> {
+    const prompt = this.buildReviewResponsePrompt({
+      businessName,
+      businessType,
+      reviewText,
+      rating,
+      reviewerName,
+      responseStyle,
+      includeApology,
+      includeCallToAction,
+      customInstructions
+    });
+
+    try {
+      const response = await openai.chat.completions.create({
+        model: this.model,
+        messages: [
+          {
+            role: "system",
+            content: `Eres un experto en gestión de reputación online para negocios locales. Tu especialidad es crear respuestas profesionales, empáticas y efectivas a reseñas de clientes que mejoren la imagen del negocio y fomenten más reseñas positivas. Siempre mantienes un tono profesional pero cálido.`
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 300
+      });
+
+      return response.choices[0].message.content || "";
+    } catch (error) {
+      console.error("Error generating review response:", error);
+      throw new Error("Failed to generate review response");
+    }
+  }
+
+  private buildReviewResponsePrompt(options: {
+    businessName: string;
+    businessType: string;
+    reviewText: string;
+    rating: number;
+    reviewerName?: string;
+    responseStyle: string;
+    includeApology: boolean;
+    includeCallToAction: boolean;
+    customInstructions?: string;
+  }): string {
+    const {
+      businessName,
+      businessType,
+      reviewText,
+      rating,
+      reviewerName,
+      responseStyle,
+      includeApology,
+      includeCallToAction,
+      customInstructions
+    } = options;
+
+    const ratingContext = rating >= 4 ? "positiva" : rating === 3 ? "neutral" : "negativa";
+    const nameGreeting = reviewerName ? `${reviewerName}` : "estimado/a cliente";
+
+    return `
+Genera una respuesta ${responseStyle} para esta reseña ${ratingContext}:
+
+NEGOCIO: ${businessName} (${businessType})
+RESEÑA: "${reviewText}"
+CALIFICACIÓN: ${rating}/5 estrellas
+${reviewerName ? `NOMBRE DEL REVIEWER: ${reviewerName}` : ''}
+
+CONFIGURACIÓN DE RESPUESTA:
+- Estilo: ${responseStyle}
+- ${includeApology && rating < 4 ? 'Incluir disculpa si es apropiado' : 'No incluir disculpa'}
+- ${includeCallToAction ? 'Incluir llamada a la acción' : 'Sin llamada a la acción'}
+${customInstructions ? `INSTRUCCIONES ESPECÍFICAS: ${customInstructions}` : ''}
+
+GUÍAS PARA LA RESPUESTA:
+1. ${rating >= 4 ? 'Agradecer la reseña positiva sinceramente' : 'Abordar las preocupaciones con empatía'}
+2. ${rating >= 4 ? 'Reforzar los puntos positivos mencionados' : 'Mostrar compromiso con la mejora'}
+3. Mencionar el nombre del negocio naturalmente
+4. ${includeCallToAction ? 'Invitar a visitar nuevamente o recomendar a otros' : ''}
+5. Mantener tono profesional pero cálido
+6. Respuesta de 50-150 palabras máximo
+
+Responde solo con el texto de la respuesta, sin comillas ni formato adicional.
+`;
+  }
 }
 
 export const openaiService = new OpenAIService();

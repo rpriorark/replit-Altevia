@@ -5,7 +5,8 @@ import { openaiService } from "./services/openai";
 import { 
   generateSEOContentSchema, 
   generateGMBPostSchema, 
-  analyzeCompetitorsSchema 
+  analyzeCompetitorsSchema,
+  generateReviewResponseSchema
 } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 
@@ -109,6 +110,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error analyzing competitors:", error);
       res.status(500).json({
         error: "Failed to analyze local competitors",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Review Response Manager Routes
+  app.post("/api/reviews/generate-response", async (req, res) => {
+    try {
+      const validationResult = generateReviewResponseSchema.safeParse(req.body);
+      
+      if (!validationResult.success) {
+        return res.status(400).json({
+          error: "Validation failed",
+          details: fromZodError(validationResult.error).toString()
+        });
+      }
+
+      const {
+        businessName,
+        businessType,
+        reviewText,
+        rating,
+        reviewerName,
+        responseStyle,
+        includeApology,
+        includeCallToAction,
+        customInstructions
+      } = validationResult.data;
+
+      const response = await openaiService.generateReviewResponse(
+        businessName,
+        businessType,
+        reviewText,
+        rating,
+        reviewerName,
+        responseStyle,
+        includeApology,
+        includeCallToAction,
+        customInstructions
+      );
+
+      res.json({ response });
+    } catch (error) {
+      console.error("Error generating review response:", error);
+      res.status(500).json({
+        error: "Failed to generate review response",
         details: error instanceof Error ? error.message : "Unknown error"
       });
     }

@@ -10,7 +10,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 import LandingPage from "@/components/LandingPage";
 import Dashboard from "@/components/Dashboard";
 import SEOGenerator from "@/components/SEOGenerator";
-import ReviewsManager from "@/components/ReviewsManager";
+import { ReviewManager } from "@/components/ReviewManager";
 import Analytics from "@/components/Analytics";
 import AISuggestions from "@/components/AISuggestions";
 import Billing from "@/components/Billing";
@@ -53,7 +53,7 @@ function Router() {
       
       <Route path="/reviews">
         <DashboardLayout>
-          <ReviewsManager />
+          <ReviewManager />
         </DashboardLayout>
       </Route>
       
