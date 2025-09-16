@@ -154,10 +154,35 @@ export const generateReviewResponseSchema = z.object({
   responseStyle: z.enum(["professional", "friendly", "concise", "detailed"]).default("professional"),
   includeApology: z.boolean().default(false),
   includeCallToAction: z.boolean().default(true),
-  customInstructions: z.string().max(300, "Las instrucciones personalizadas no pueden exceder 300 caracteres").optional()
+  customInstructions: z.string().max(300, "Las instrucciones personalizadas no pueden exceder 300 caracteres").optional(),
+  // New legal mode parameters
+  legalMode: z.boolean().default(false),
+  industryType: z.enum(["healthcare", "legal", "consulting", "finance", "general"]).optional(),
+  conflictLevel: z.enum(["low", "medium", "high"]).optional()
+});
+
+// Legal Review Detection Schema
+export const detectConflictiveReviewSchema = z.object({
+  reviewText: z.string().min(1, "El texto de la reseña es requerido").max(2000, "El texto de la reseña no puede exceder 2000 caracteres"),
+  rating: z.number().min(1).max(5),
+  businessType: z.string().min(1, "El tipo de negocio es requerido").max(50, "El tipo de negocio no puede exceder 50 caracteres")
+});
+
+// Conflict Detection Result Type
+export const conflictDetectionResultSchema = z.object({
+  isConflictive: z.boolean(),
+  conflictLevel: z.enum(["low", "medium", "high"]),
+  detectedKeywords: z.array(z.string()),
+  legalRisk: z.boolean(),
+  sentimentScore: z.number().min(-1).max(1),
+  recommendedIndustryType: z.enum(["healthcare", "legal", "consulting", "finance", "general"]).optional(),
+  riskFactors: z.array(z.string()),
+  suggestedResponseApproach: z.string()
 });
 
 export type GenerateSEOContentRequest = z.infer<typeof generateSEOContentSchema>;
 export type GenerateGMBPostRequest = z.infer<typeof generateGMBPostSchema>;
 export type AnalyzeCompetitorsRequest = z.infer<typeof analyzeCompetitorsSchema>;
 export type GenerateReviewResponseRequest = z.infer<typeof generateReviewResponseSchema>;
+export type DetectConflictiveReviewRequest = z.infer<typeof detectConflictiveReviewSchema>;
+export type ConflictDetectionResult = z.infer<typeof conflictDetectionResultSchema>;

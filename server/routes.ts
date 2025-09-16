@@ -6,7 +6,8 @@ import {
   generateSEOContentSchema, 
   generateGMBPostSchema, 
   analyzeCompetitorsSchema,
-  generateReviewResponseSchema
+  generateReviewResponseSchema,
+  detectConflictiveReviewSchema
 } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 
@@ -50,6 +51,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(generatedContent);
     } catch (error) {
       console.error("Error generating SEO content:", error);
+      if (error instanceof Error && error.message === "OPENAI_SERVICE_UNAVAILABLE") {
+        return res.status(503).json({
+          error: "OpenAI service unavailable",
+          details: "OpenAI API key is not configured or invalid. Please contact support."
+        });
+      }
+      if (error instanceof Error && error.message === "OPENAI_RATE_LIMITED") {
+        return res.status(429).json({
+          error: "Rate limit exceeded",
+          details: "OpenAI API rate limit exceeded. Please try again later."
+        });
+      }
+      if (error instanceof Error && error.message === "OPENAI_SERVER_ERROR") {
+        return res.status(502).json({
+          error: "OpenAI server error",
+          details: "OpenAI service is experiencing issues. Please try again later."
+        });
+      }
       res.status(500).json({
         error: "Failed to generate SEO content",
         details: error instanceof Error ? error.message : "Unknown error"
@@ -79,6 +98,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ post });
     } catch (error) {
       console.error("Error generating GMB post:", error);
+      if (error instanceof Error && error.message === "OPENAI_SERVICE_UNAVAILABLE") {
+        return res.status(503).json({
+          error: "OpenAI service unavailable",
+          details: "OpenAI API key is not configured or invalid. Please contact support."
+        });
+      }
+      if (error instanceof Error && error.message === "OPENAI_RATE_LIMITED") {
+        return res.status(429).json({
+          error: "Rate limit exceeded",
+          details: "OpenAI API rate limit exceeded. Please try again later."
+        });
+      }
+      if (error instanceof Error && error.message === "OPENAI_SERVER_ERROR") {
+        return res.status(502).json({
+          error: "OpenAI server error",
+          details: "OpenAI service is experiencing issues. Please try again later."
+        });
+      }
       res.status(500).json({
         error: "Failed to generate Google My Business post",
         details: error instanceof Error ? error.message : "Unknown error"
@@ -108,6 +145,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ analysis });
     } catch (error) {
       console.error("Error analyzing competitors:", error);
+      if (error instanceof Error && error.message === "OPENAI_SERVICE_UNAVAILABLE") {
+        return res.status(503).json({
+          error: "OpenAI service unavailable",
+          details: "OpenAI API key is not configured or invalid. Please contact support."
+        });
+      }
+      if (error instanceof Error && error.message === "OPENAI_RATE_LIMITED") {
+        return res.status(429).json({
+          error: "Rate limit exceeded",
+          details: "OpenAI API rate limit exceeded. Please try again later."
+        });
+      }
+      if (error instanceof Error && error.message === "OPENAI_SERVER_ERROR") {
+        return res.status(502).json({
+          error: "OpenAI server error",
+          details: "OpenAI service is experiencing issues. Please try again later."
+        });
+      }
       res.status(500).json({
         error: "Failed to analyze local competitors",
         details: error instanceof Error ? error.message : "Unknown error"
@@ -136,7 +191,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         responseStyle,
         includeApology,
         includeCallToAction,
-        customInstructions
+        customInstructions,
+        legalMode,
+        industryType,
+        conflictLevel
       } = validationResult.data;
 
       const response = await openaiService.generateReviewResponse(
@@ -148,14 +206,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
         responseStyle,
         includeApology,
         includeCallToAction,
-        customInstructions
+        customInstructions,
+        legalMode,
+        industryType,
+        conflictLevel
       );
 
       res.json({ response });
     } catch (error) {
       console.error("Error generating review response:", error);
+      if (error instanceof Error && error.message === "OPENAI_SERVICE_UNAVAILABLE") {
+        return res.status(503).json({
+          error: "OpenAI service unavailable",
+          details: "OpenAI API key is not configured or invalid. Please contact support."
+        });
+      }
+      if (error instanceof Error && error.message === "OPENAI_RATE_LIMITED") {
+        return res.status(429).json({
+          error: "Rate limit exceeded",
+          details: "OpenAI API rate limit exceeded. Please try again later."
+        });
+      }
+      if (error instanceof Error && error.message === "OPENAI_SERVER_ERROR") {
+        return res.status(502).json({
+          error: "OpenAI server error",
+          details: "OpenAI service is experiencing issues. Please try again later."
+        });
+      }
       res.status(500).json({
         error: "Failed to generate review response",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Conflict Detection Route
+  app.post("/api/reviews/detect-conflict", async (req, res) => {
+    try {
+      const validationResult = detectConflictiveReviewSchema.safeParse(req.body);
+      
+      if (!validationResult.success) {
+        return res.status(400).json({
+          error: "Validation failed",
+          details: fromZodError(validationResult.error).toString()
+        });
+      }
+
+      const { reviewText, rating, businessType } = validationResult.data;
+
+      const conflictAnalysis = await openaiService.detectConflictiveReview(
+        reviewText,
+        rating,
+        businessType
+      );
+
+      res.json(conflictAnalysis);
+    } catch (error) {
+      console.error("Error detecting conflictive review:", error);
+      if (error instanceof Error && error.message === "OPENAI_SERVICE_UNAVAILABLE") {
+        return res.status(503).json({
+          error: "OpenAI service unavailable",
+          details: "OpenAI API key is not configured or invalid. Please contact support."
+        });
+      }
+      if (error instanceof Error && error.message === "OPENAI_RATE_LIMITED") {
+        return res.status(429).json({
+          error: "Rate limit exceeded",
+          details: "OpenAI API rate limit exceeded. Please try again later."
+        });
+      }
+      if (error instanceof Error && error.message === "OPENAI_SERVER_ERROR") {
+        return res.status(502).json({
+          error: "OpenAI server error",
+          details: "OpenAI service is experiencing issues. Please try again later."
+        });
+      }
+      res.status(500).json({
+        error: "Failed to analyze review for conflicts",
         details: error instanceof Error ? error.message : "Unknown error"
       });
     }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { useConflictDetection } from "@/hooks/use-conflict-detection";
 import { apiRequest } from "@/lib/queryClient";
 import { renderTextSafe } from "@/lib/markdown";
 import { 
@@ -20,7 +21,12 @@ import {
   ThumbsDown,
   Meh,
   Heart,
-  Settings
+  Settings,
+  Shield,
+  AlertTriangle,
+  Scale,
+  Eye,
+  CheckCircle
 } from "lucide-react";
 
 export function ReviewManager() {
@@ -36,7 +42,97 @@ export function ReviewManager() {
   const [generatedResponse, setGeneratedResponse] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   
+  // Legal Mode State
+  const [legalMode, setLegalMode] = useState(false);
+  const [industryType, setIndustryType] = useState<"healthcare" | "legal" | "consulting" | "finance" | "general">("general");
+  const [showConflictDetails, setShowConflictDetails] = useState(false);
+  
   const { toast } = useToast();
+
+  // Use the optimized conflict detection hook
+  const {
+    conflictDetection,
+    clientSidePrediction,
+    isAnalyzing: isAnalyzingConflict,
+    detectConflicts
+  } = useConflictDetection({
+    debounceMs: 500,
+    minTextLength: 20
+  });
+
+  // Auto-detect conflicts when review text changes
+  useEffect(() => {
+    if (reviewText && businessType) {
+      detectConflicts(reviewText, businessType, rating);
+    }
+  }, [reviewText, businessType, rating, detectConflicts]);
+
+  // Handle automatic legal mode activation
+  useEffect(() => {
+    if (conflictDetection?.isConflictive && conflictDetection.conflictLevel === 'high') {
+      setLegalMode(true);
+      if (conflictDetection.recommendedIndustryType) {
+        setIndustryType(conflictDetection.recommendedIndustryType);
+      }
+      toast({
+        title: "⚠️ Reseña Sensible Detectada",
+        description: "Se ha activado automáticamente el Modo Legal para esta reseña.",
+        variant: "destructive"
+      });
+    } else if (conflictDetection?.isConflictive) {
+      toast({
+        title: "🔍 Contenido Sensible",
+        description: `Se detectó contenido potencialmente conflictivo (Nivel: ${conflictDetection.conflictLevel}). Considera activar el Modo Legal.`,
+      });
+    }
+  }, [conflictDetection, toast]);
+
+  const getConflictBadge = (detection: any) => {
+    if (!detection || !detection.isConflictive) return null;
+    
+    const { conflictLevel, legalRisk } = detection;
+    const variants: Record<string, "outline" | "secondary" | "destructive"> = {
+      low: "outline",
+      medium: "secondary", 
+      high: "destructive"
+    };
+    
+    return (
+      <Badge 
+        variant={variants[conflictLevel] || "outline"} 
+        className="flex items-center gap-1"
+      >
+        {legalRisk && <Scale className="h-3 w-3" />}
+        <AlertTriangle className="h-3 w-3" />
+        Sensible ({conflictLevel})
+      </Badge>
+    );
+  };
+
+  const getClientSidePredictionBadge = (prediction: any) => {
+    if (!prediction) return null;
+    
+    const { hasLegalKeywords, hasAggressiveLanguage, riskLevel } = prediction;
+    const variants: Record<string, "outline" | "secondary" | "destructive"> = {
+      low: "outline",
+      medium: "secondary", 
+      high: "destructive"
+    };
+    
+    return (
+      <Badge 
+        variant={variants[riskLevel]} 
+        className="flex items-center gap-1 opacity-70"
+      >
+        <Eye className="h-3 w-3" />
+        {hasLegalKeywords && "Legal"}
+        {hasLegalKeywords && hasAggressiveLanguage && " + "}
+        {hasAggressiveLanguage && "Agresivo"}
+        {!hasLegalKeywords && !hasAggressiveLanguage && "Analizando"}
+        ({riskLevel})
+      </Badge>
+    );
+  };
 
   const generateResponse = async () => {
     if (!businessName || !businessType || !reviewText) {
@@ -60,7 +156,10 @@ export function ReviewManager() {
         responseStyle,
         includeApology,
         includeCallToAction,
-        customInstructions: customInstructions || undefined
+        customInstructions: customInstructions || undefined,
+        legalMode,
+        industryType: legalMode ? industryType : undefined,
+        conflictLevel: conflictDetection?.conflictLevel
       });
 
       const result = await response.json();
@@ -165,7 +264,16 @@ export function ReviewManager() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <Label>Información de la Reseña</Label>
-                {rating && getRatingBadge(rating)}
+                <div className="flex items-center gap-2">
+                  {conflictDetection ? getConflictBadge(conflictDetection) : clientSidePrediction && getClientSidePredictionBadge(clientSidePrediction)}
+                  {rating && getRatingBadge(rating)}
+                  {isAnalyzingConflict && (
+                    <Badge variant="outline" className="flex items-center gap-1">
+                      <Eye className="h-3 w-3 animate-pulse" />
+                      Analizando IA...
+                    </Badge>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -307,6 +415,137 @@ export function ReviewManager() {
               </div>
             </div>
 
+            <Separator />
+
+            {/* Legal Mode Section */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Shield className={`h-5 w-5 ${legalMode ? 'text-purple-600' : 'text-muted-foreground'}`} />
+                  <Label className={legalMode ? 'text-purple-600 font-semibold' : ''}>
+                    Modo Legal Empático
+                  </Label>
+                </div>
+                <Switch
+                  checked={legalMode}
+                  onCheckedChange={setLegalMode}
+                  data-testid="switch-legal-mode"
+                />
+              </div>
+
+              {legalMode && (
+                <div className="space-y-4 p-4 bg-gradient-to-r from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 rounded-lg border border-purple-200 dark:border-purple-800">
+                  <div className="flex items-start gap-2">
+                    <Scale className="h-4 w-4 text-purple-600 mt-0.5" />
+                    <div className="text-xs text-purple-800 dark:text-purple-200">
+                      <p className="font-medium">Modo Legal Activado</p>
+                      <p>Respuestas empáticas y legalmente apropiadas para reseñas sensibles</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Tipo de Industria</Label>
+                    <Select value={industryType} onValueChange={(value: "healthcare" | "legal" | "consulting" | "finance" | "general") => setIndustryType(value)}>
+                      <SelectTrigger data-testid="select-industry-type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="healthcare">🏥 Salud y Medicina</SelectItem>
+                        <SelectItem value="legal">⚖️ Servicios Legales</SelectItem>
+                        <SelectItem value="consulting">🏢 Consultoría Profesional</SelectItem>
+                        <SelectItem value="finance">💰 Servicios Financieros</SelectItem>
+                        <SelectItem value="general">🏪 General</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Conflict Detection Results */}
+            {conflictDetection && conflictDetection.isConflictive && (
+              <div className="space-y-4">
+                <Separator />
+                <div className="p-4 bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20 rounded-lg border border-orange-200 dark:border-orange-800">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-5 w-5 text-orange-600" />
+                      <span className="font-semibold text-orange-800 dark:text-orange-200">
+                        Análisis de Conflicto
+                      </span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowConflictDetails(!showConflictDetails)}
+                      data-testid="button-toggle-conflict-details"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 mb-3">
+                    <div>
+                      <span className="text-xs text-orange-700 dark:text-orange-300">Nivel de Riesgo</span>
+                      <p className="font-medium text-orange-900 dark:text-orange-100 capitalize">
+                        {conflictDetection.conflictLevel}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-orange-700 dark:text-orange-300">Riesgo Legal</span>
+                      <p className="font-medium text-orange-900 dark:text-orange-100">
+                        {conflictDetection.legalRisk ? 'Alto' : 'Bajo'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {showConflictDetails && (
+                    <div className="space-y-3 pt-3 border-t border-orange-200 dark:border-orange-800">
+                      {conflictDetection.detectedKeywords?.length > 0 && (
+                        <div>
+                          <span className="text-xs font-medium text-orange-700 dark:text-orange-300">
+                            Palabras Clave Detectadas:
+                          </span>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {conflictDetection.detectedKeywords.map((keyword: string, index: number) => (
+                              <Badge key={index} variant="outline" className="text-xs">
+                                {keyword}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {conflictDetection.riskFactors?.length > 0 && (
+                        <div>
+                          <span className="text-xs font-medium text-orange-700 dark:text-orange-300">
+                            Factores de Riesgo:
+                          </span>
+                          <ul className="text-xs text-orange-800 dark:text-orange-200 mt-1 space-y-1">
+                            {conflictDetection.riskFactors.map((factor: string, index: number) => (
+                              <li key={index} className="flex items-start gap-1">
+                                <span>•</span>
+                                <span>{factor}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      <div>
+                        <span className="text-xs font-medium text-orange-700 dark:text-orange-300">
+                          Enfoque Sugerido:
+                        </span>
+                        <p className="text-xs text-orange-800 dark:text-orange-200 mt-1">
+                          {conflictDetection.suggestedResponseApproach}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             <Button 
               onClick={generateResponse} 
               disabled={isGenerating || !businessName || !businessType || !reviewText}
@@ -332,11 +571,18 @@ export function ReviewManager() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Heart className="h-5 w-5" />
-              Respuesta Generada
+              {legalMode ? (
+                <Shield className="h-5 w-5 text-purple-600" />
+              ) : (
+                <Heart className="h-5 w-5" />
+              )}
+              {legalMode ? 'Respuesta Legal Empática' : 'Respuesta Generada'}
             </CardTitle>
             <CardDescription>
-              Tu respuesta profesional lista para publicar
+              {legalMode 
+                ? 'Respuesta legalmente apropiada y empática para reseñas sensibles'
+                : 'Tu respuesta profesional lista para publicar'
+              }
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -388,6 +634,36 @@ export function ReviewManager() {
           </div>
           
           <div className="grid md:grid-cols-3 gap-6">
+            <div className="flex items-start gap-3">
+              <Shield className="h-5 w-5 text-purple-600 mt-1" />
+              <div>
+                <h4 className="font-medium mb-1">Modo Legal Empático</h4>
+                <p className="text-sm text-muted-foreground">
+                  Respuestas especializadas para reseñas sensibles y conflictivas
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-orange-600 mt-1" />
+              <div>
+                <h4 className="font-medium mb-1">Detección Automática</h4>
+                <p className="text-sm text-muted-foreground">
+                  Identifica contenido conflictivo y activa protecciones legales
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <Scale className="h-5 w-5 text-chart-2 mt-1" />
+              <div>
+                <h4 className="font-medium mb-1">Por Industria</h4>
+                <p className="text-sm text-muted-foreground">
+                  Especializado para salud, legal, consultoría y finanzas
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="grid md:grid-cols-3 gap-6 mt-6">
             <div className="flex items-start gap-3">
               <Sparkles className="h-5 w-5 text-chart-1 mt-1" />
               <div>
