@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { 
   Shield, 
   Users, 
@@ -22,7 +22,8 @@ import {
   UserCheck,
   AlertTriangle,
   BarChart3,
-  Calendar
+  Calendar,
+  LogOut
 } from "lucide-react";
 import {
   Dialog,
@@ -69,7 +70,9 @@ interface TrialSignup {
 export default function AdminDashboard() {
   const { toast } = useToast();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [showTrialDetails, setShowTrialDetails] = useState(false);
+  const [currentUser, setCurrentUser] = useState<{id: string, username: string} | null>(null);
 
   const form = useForm<AdminLoginForm>({
     resolver: zodResolver(adminLoginSchema),
@@ -79,6 +82,25 @@ export default function AdminDashboard() {
     }
   });
 
+  // Check authentication status on load
+  useEffect(() => {
+    const checkAuthStatus = async () => {
+      try {
+        const response = await apiRequest('/api/admin/verify');
+        const data = await response.json();
+        setIsAuthenticated(true);
+        setCurrentUser(data.user);
+      } catch (error) {
+        setIsAuthenticated(false);
+        setCurrentUser(null);
+      } finally {
+        setIsCheckingAuth(false);
+      }
+    };
+
+    checkAuthStatus();
+  }, []);
+
   // Admin login mutation
   const loginMutation = useMutation({
     mutationFn: async (data: AdminLoginForm) => {
@@ -86,10 +108,12 @@ export default function AdminDashboard() {
         method: 'POST',
         data
       });
-      return response;
+      return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       setIsAuthenticated(true);
+      setCurrentUser(data.user);
+      queryClient.invalidateQueries();
       toast({
         title: "Acceso Autorizado",
         description: "Bienvenido al panel de administración.",
@@ -104,21 +128,68 @@ export default function AdminDashboard() {
     },
   });
 
+  // Admin logout mutation
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest('/api/admin/logout', {
+        method: 'POST'
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      setIsAuthenticated(false);
+      setCurrentUser(null);
+      queryClient.clear();
+      toast({
+        title: "Sesión Cerrada",
+        description: "Has cerrado sesión correctamente.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Error al cerrar sesión.",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Get admin statistics
-  const { data: stats, isLoading: statsLoading } = useQuery<AdminStats>({
+  const { data: statsResponse, isLoading: statsLoading } = useQuery<{stats: AdminStats}>({
     queryKey: ['/api/admin/stats'],
     enabled: isAuthenticated,
   });
 
   // Get trial signups
-  const { data: trialSignups = [], isLoading: trialsLoading } = useQuery<TrialSignup[]>({
+  const { data: signupsResponse, isLoading: trialsLoading } = useQuery<{signups: TrialSignup[]}>({
     queryKey: ['/api/admin/trial-signups'],
     enabled: isAuthenticated,
   });
 
+  const stats = statsResponse?.stats;
+  const trialSignups = signupsResponse?.signups || [];
+
   const handleLogin = (data: AdminLoginForm) => {
     loginMutation.mutate(data);
   };
+
+  const handleLogout = () => {
+    logoutMutation.mutate();
+  };
+
+  // Show loading while checking authentication
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50" data-testid="admin-loading">
+        <Card className="w-full max-w-md">
+          <CardContent className="flex items-center justify-center p-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <span className="ml-2">Verificando autenticación...</span>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('es-MX', {
@@ -214,9 +285,21 @@ export default function AdminDashboard() {
             Gestión y estadísticas del sistema Altevia
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Shield className="h-5 w-5 text-green-600" />
-          <span className="text-sm text-green-600">Administrador</span>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Shield className="h-5 w-5 text-green-600" />
+            <span className="text-sm text-green-600">Administrador: {currentUser?.username}</span>
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleLogout}
+            disabled={logoutMutation.isPending}
+            data-testid="button-logout"
+          >
+            <LogOut className="h-4 w-4 mr-2" />
+            {logoutMutation.isPending ? 'Cerrando...' : 'Cerrar Sesión'}
+          </Button>
         </div>
       </div>
 

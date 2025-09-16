@@ -19,6 +19,8 @@ import { PredictiveReputation } from "@/components/PredictiveReputation";
 import Billing from "@/components/Billing";
 import Team from "@/components/Team";
 import Settings from "@/components/Settings";
+import AdminDashboard from "@/components/AdminDashboard";
+import PromoVideo from "@/components/PromoVideo";
 import NotFound from "@/pages/not-found";
 
 function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -40,6 +42,12 @@ function Router() {
     <Switch>
       {/* Landing Page */}
       <Route path="/" component={LandingPage} />
+      
+      {/* Admin Panel (standalone, no sidebar layout) */}
+      <Route path="/admin" component={AdminDashboard} />
+      
+      {/* Promotional Video Page */}
+      <Route path="/promo" component={PromoVideo} />
       
       {/* Dashboard Routes */}
       <Route path="/dashboard">

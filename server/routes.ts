@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import path from "path";
+import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import { openaiService } from "./services/openai";
 import { ReputationAnalysisService, type RiskScoreComponents } from "./services/reputation";
@@ -39,7 +40,8 @@ import {
   insertCompetitorAnalysisSchema,
   insertBusinessSchema,
   insertLocationSchema,
-  insertUserSchema
+  insertUserSchema,
+  RequestWithUser
 } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 import { z } from "zod";
@@ -64,6 +66,23 @@ function mapComponentsForUI(serviceComponents: RiskScoreComponents): {
 export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize reputation analysis service
   const reputationService = new ReputationAnalysisService(storage);
+  
+  // Rate limiting for admin login to prevent brute force attacks
+  const adminLoginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 5, // Limit each IP to 5 admin login requests per windowMs
+    message: {
+      error: "Too many admin login attempts",
+      details: "Too many login attempts from this IP, please try again after 15 minutes."
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    // Only count failed requests
+    skipSuccessfulRequests: true,
+    // Custom key generator to include user agent for better security
+    keyGenerator: (req) => `${req.ip}-${req.get('User-Agent')}`,
+  });
+  
   // SEO Content Generation Routes
   app.post("/api/seo/generate-content", async (req, res) => {
     try {
@@ -2622,8 +2641,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ADMIN AUTHENTICATION ROUTES
   // ===========================================
 
-  // Admin login
-  app.post("/api/admin/login", async (req, res) => {
+  // Admin login (with rate limiting)
+  app.post("/api/admin/login", adminLoginLimiter, async (req, res) => {
     try {
       const validationResult = z.object({
         username: z.string(),
@@ -2673,6 +2692,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
         details: error instanceof Error ? error.message : "Unknown error"
       });
     }
+  });
+
+  // Admin logout
+  app.post("/api/admin/logout", async (req, res) => {
+    try {
+      const sessionToken = req.cookies?.sessionToken;
+      
+      if (sessionToken) {
+        AuthService.logout(sessionToken);
+      }
+      
+      // Clear the session cookie
+      res.clearCookie('sessionToken', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict'
+      });
+      
+      res.json({ message: "Logout successful" });
+    } catch (error) {
+      console.error("Error during admin logout:", error);
+      res.status(500).json({
+        error: "Logout failed",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  // Verify session (check if user is still authenticated)
+  app.get("/api/admin/verify", AuthService.requireAdminAuth, async (req, res) => {
+    const userReq = req as RequestWithUser;
+    res.json({
+      authenticated: true,
+      user: {
+        id: userReq.user.id,
+        username: userReq.user.username
+      }
+    });
   });
 
   // Get system stats (admin only)

@@ -2,6 +2,7 @@ import { sql, relations } from "drizzle-orm";
 import { pgTable, text, varchar, timestamp, decimal, integer, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import type { Request } from "express";
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -655,7 +656,12 @@ export const reportExports = pgTable("report_exports", {
   filters: text("filters"), // JSON object with applied filters
   status: varchar("status", { length: 50 }).notNull().default('processing'), // 'processing', 'completed', 'failed'
   fileUrl: text("file_url"), // Download URL for the generated report
+  fileName: varchar("file_name", { length: 255 }), // File name for the report
   fileSize: integer("file_size"), // File size in bytes
+  businessName: varchar("business_name", { length: 255 }), // Business name for report context
+  location: varchar("location", { length: 255 }), // Location string for report context
+  dateFrom: text("date_from"), // Start date for report range
+  dateTo: text("date_to"), // End date for report range
   expiresAt: timestamp("expires_at"), // When the download link expires
   errorMessage: text("error_message"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`)
@@ -785,6 +791,8 @@ export const insertGmbPostSchema = createInsertSchema(gmbPosts).omit({
 export const insertReportExportSchema = createInsertSchema(reportExports).omit({
   id: true,
   createdAt: true,
+}).extend({
+  format: z.enum(["pdf", "excel"])
 });
 
 export const insertAdminUserSchema = createInsertSchema(adminUsers).omit({
@@ -864,6 +872,14 @@ export const exportReportSchema = z.object({
   }),
   filters: z.record(z.any()).optional()
 });
+
+// Type definitions for authentication
+export type RequestWithUser = {
+  user: {
+    id: string;
+    username: string;
+  };
+} & Request;
 
 // Admin Authentication Schema
 export const adminLoginSchema = z.object({

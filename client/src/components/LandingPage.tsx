@@ -1,7 +1,11 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Eye, TrendingUp, MessageSquare, BarChart3, Zap, Shield } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Eye, TrendingUp, MessageSquare, BarChart3, Zap, Shield, Play } from "lucide-react";
+import { Link } from "wouter";
+import VideoPlayerModal from "@/components/VideoPlayerModal";
 import heroImage from "@assets/generated_images/Hero_section_image_19f86e27.png";
 import dashboardMockup from "@assets/generated_images/Dashboard_analytics_mockup_cf3ad6f5.png";
 import alteviaLogo from "@assets/generated_images/Altevia_logo_design_2c146ee7.png";
@@ -12,6 +16,8 @@ import reviewsIllustration from "@assets/generated_images/Customer_reviews_illus
 import analyticsChart from "@assets/generated_images/Analytics_growth_chart_d1d69646.png";
 
 const LandingPage = () => {
+  const [showVideoModal, setShowVideoModal] = useState(false);
+  
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -63,8 +69,15 @@ const LandingPage = () => {
                   Comenzar Gratis
                   <Zap className="ml-2 h-5 w-5" />
                 </Button>
-                <Button variant="outline" size="lg" className="text-lg px-8 border-primary/20 hover:bg-primary/5" data-testid="button-demo">
-                  Ver Demo
+                <Button 
+                  variant="outline" 
+                  size="lg" 
+                  className="text-lg px-8 border-primary/20 hover:bg-primary/5" 
+                  onClick={() => setShowVideoModal(true)}
+                  data-testid="button-video"
+                >
+                  <Play className="mr-2 h-5 w-5" />
+                  Ver Video
                 </Button>
               </div>
               <div className="flex items-center gap-6 text-sm text-muted-foreground">
@@ -334,6 +347,18 @@ const LandingPage = () => {
           </div>
         </div>
       </footer>
+
+      {/* Video Modal */}
+      <Dialog open={showVideoModal} onOpenChange={setShowVideoModal}>
+        <DialogContent className="max-w-4xl max-h-[90vh] p-0 overflow-hidden bg-gradient-to-br from-background to-muted/50" data-testid="modal-video">
+          <DialogHeader className="p-6 pb-4">
+            <DialogTitle className="text-2xl font-bold text-primary">
+              Descubre cómo Altevia transforma tu visibilidad digital
+            </DialogTitle>
+          </DialogHeader>
+          <VideoPlayerModal onClose={() => setShowVideoModal(false)} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
