@@ -25,8 +25,10 @@ import {
   Calendar,
   TrendingUp,
   Target,
-  Settings
+  Settings,
+  Map
 } from "lucide-react";
+import { CompetitorMap } from "./CompetitorMap";
 
 interface Location {
   id: string;
@@ -115,7 +117,7 @@ export function MultiLocationDashboard() {
   };
 
   const [selectedBusiness, setSelectedBusiness] = useState<Business | null>(mockBusiness);
-  const [activeView, setActiveView] = useState<"overview" | "locations" | "performance">("overview");
+  const [activeView, setActiveView] = useState<"overview" | "locations" | "performance" | "map">("overview");
   const [isAddingLocation, setIsAddingLocation] = useState(false);
   const [newLocation, setNewLocation] = useState({
     name: "",
@@ -295,10 +297,14 @@ export function MultiLocationDashboard() {
 
       {/* Main Content Tabs */}
       <Tabs value={activeView} onValueChange={(value) => setActiveView(value as any)} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="overview" data-testid="tab-overview">Vista General</TabsTrigger>
           <TabsTrigger value="locations" data-testid="tab-locations">Ubicaciones</TabsTrigger>
           <TabsTrigger value="performance" data-testid="tab-performance">Rendimiento</TabsTrigger>
+          <TabsTrigger value="map" data-testid="tab-map">
+            <Map className="h-4 w-4 mr-2" />
+            Mapa
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -610,6 +616,14 @@ export function MultiLocationDashboard() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="map" className="space-y-6">
+          <CompetitorMap 
+            business={selectedBusiness} 
+            selectedLocationId={undefined}
+            className="w-full"
+          />
         </TabsContent>
       </Tabs>
     </div>
