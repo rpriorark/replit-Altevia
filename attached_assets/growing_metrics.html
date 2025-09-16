@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Métricas Crecientes - Con Altevia</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 40px;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .dashboard {
+            max-width: 800px;
+            width: 100%;
+        }
+        .title {
+            text-align: center;
+            font-size: 32px;
+            font-weight: bold;
+            margin-bottom: 40px;
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        .metric-card {
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(22, 163, 74, 0.1) 100%);
+            border-radius: 12px;
+            padding: 24px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            box-shadow: 0 8px 32px rgba(34, 197, 94, 0.1);
+        }
+        .metric-value {
+            font-size: 48px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+        .metric-label {
+            font-size: 16px;
+            color: #d1d5db;
+            margin-bottom: 16px;
+        }
+        .trend {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            color: #22c55e;
+            font-weight: 600;
+        }
+        .trend-icon {
+            font-size: 20px;
+        }
+        .chart-container {
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(22, 163, 74, 0.1) 100%);
+            border-radius: 12px;
+            padding: 24px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            box-shadow: 0 8px 32px rgba(34, 197, 94, 0.1);
+        }
+        .chart {
+            height: 200px;
+            background: linear-gradient(to top, 
+                rgba(34, 197, 94, 0.2) 0%,
+                rgba(34, 197, 94, 0.1) 50%,
+                rgba(34, 197, 94, 0) 100%);
+            border-radius: 8px;
+            position: relative;
+            overflow: hidden;
+        }
+        .chart-line {
+            position: absolute;
+            bottom: 20%;
+            left: 10%;
+            width: 80%;
+            height: 4px;
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+            transform: rotate(20deg);
+            box-shadow: 0 0 15px rgba(34, 197, 94, 0.7);
+        }
+        .chart-line::after {
+            content: '📈';
+            position: absolute;
+            right: -20px;
+            top: -15px;
+            font-size: 24px;
+        }
+        .success-text {
+            text-align: center;
+            font-size: 18px;
+            color: #22c55e;
+            margin-top: 30px;
+            font-weight: 600;
+        }
+        .roi-highlight {
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            margin-top: 30px;
+        }
+        .roi-highlight h3 {
+            margin: 0 0 10px 0;
+            font-size: 24px;
+        }
+        .roi-highlight p {
+            margin: 0;
+            font-size: 16px;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <h1 class="title">🚀 Con Altevia: Más Visibilidad = Más Clientes = Más Ingresos</h1>
+        
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-value">89%</div>
+                <div class="metric-label">Visibilidad Online</div>
+                <div class="trend">
+                    <span class="trend-icon">📈</span>
+                    <span>+87% este mes</span>
+                </div>
+            </div>
+            
+            <div class="metric-card">
+                <div class="metric-value">2.4K</div>
+                <div class="metric-label">Visitas Web</div>
+                <div class="trend">
+                    <span class="trend-icon">📈</span>
+                    <span>+156% este mes</span>
+                </div>
+            </div>
+            
+            <div class="metric-card">
+                <div class="metric-value">4.8★</div>
+                <div class="metric-label">Rating Promedio</div>
+                <div class="trend">
+                    <span class="trend-icon">📈</span>
+                    <span>+3.6★ mejorado</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <h3 style="margin-top: 0; color: #22c55e;">Crecimiento Exponencial de Tráfico</h3>
+            <div class="chart">
+                <div class="chart-line"></div>
+            </div>
+        </div>
+
+        <div class="roi-highlight">
+            <h3>💰 ROI: 300% en los primeros 3 meses</h3>
+            <p>La inversión en Altevia se paga sola con solo 2 clientes nuevos al mes</p>
+        </div>
+
+        <div class="success-text">
+            ✅ Resultados reales, clientes reales, crecimiento real
+        </div>
+    </div>
+</body>
+</html>

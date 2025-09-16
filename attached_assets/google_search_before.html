@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Búsqueda Google - Invisible</title>
+    <style>
+        body {
+            font-family: arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #fff;
+        }
+        .search-container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .search-box {
+            border: 1px solid #dfe1e5;
+            border-radius: 24px;
+            height: 44px;
+            width: 100%;
+            padding: 0 16px;
+            font-size: 16px;
+            outline: none;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 5px 1px rgba(64,60,67,.16);
+        }
+        .result {
+            margin-bottom: 30px;
+            padding: 0;
+        }
+        .result-title {
+            color: #1a0dab;
+            font-size: 20px;
+            text-decoration: none;
+            margin-bottom: 3px;
+            display: block;
+        }
+        .result-title:visited {
+            color: #681da8;
+        }
+        .result-url {
+            color: #006621;
+            font-size: 14px;
+            margin-bottom: 3px;
+        }
+        .result-description {
+            color: #4d5156;
+            font-size: 14px;
+            line-height: 1.58;
+        }
+        .no-results {
+            text-align: center;
+            color: #70757a;
+            font-size: 16px;
+            margin-top: 50px;
+        }
+        .sad-face {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        .highlight {
+            background-color: #fff3cd;
+            padding: 15px;
+            border-left: 4px solid #ffc107;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="search-container">
+        <input type="text" class="search-box" value="restaurante italiano ciudad" readonly>
+        
+        <div class="highlight">
+            <strong>😰 Tu negocio NO aparece aquí</strong><br>
+            Mientras tus competidores acaparan todos los clientes...
+        </div>
+
+        <div class="result">
+            <a href="#" class="result-title">Trattoria Roma - Auténtica Comida Italiana</a>
+            <div class="result-url">www.trattoriaroma.com</div>
+            <div class="result-description">Descubre los sabores más auténticos de Italia en nuestro acogedor restaurante. Pasta fresca, pizzas artesanales y vinos selectos. Reserva ahora.</div>
+        </div>
+
+        <div class="result">
+            <a href="#" class="result-title">Il Giardino - Restaurante Italiano Gourmet</a>
+            <div class="result-url">www.ilgiardino.es</div>
+            <div class="result-description">Experiencia gastronómica italiana premium. Chef con 20 años de experiencia. Especialistas en risottos y carnes. Terraza disponible.</div>
+        </div>
+
+        <div class="result">
+            <a href="#" class="result-title">Bella Napoli - Pizzería y Ristorante</a>
+            <div class="result-url">www.bellanapoli.com</div>
+            <div class="result-description">Pizzas napolitanas en horno de leña, pastas caseras y postres tradicionales. Ambiente familiar y servicio excepcional desde 1995.</div>
+        </div>
+
+        <div class="no-results">
+            <div class="sad-face">😔</div>
+            <p><strong>Tu restaurante debería estar aquí...</strong></p>
+            <p>Pero sin SEO optimizado, eres invisible para tus clientes potenciales</p>
+        </div>
+    </div>
+</body>
+</html>
