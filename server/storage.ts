@@ -46,6 +46,7 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUserPassword(userId: string, hashedPassword: string): Promise<User | undefined>;
   
   // Business methods
   getBusiness(id: string): Promise<Business | undefined>;
@@ -123,6 +124,7 @@ export interface IStorage {
   getSubscriptionsByPlan(planId: string): Promise<Subscription[]>;
   createSubscription(subscription: Omit<InsertSubscription, 'id'>): Promise<Subscription>;
   updateSubscription(subscriptionId: string, updateData: Partial<Subscription>): Promise<Subscription | undefined>;
+  updateSubscriptionByMercadoPagoId(mercadoPagoId: string, updateData: Partial<Subscription>): Promise<Subscription | undefined>;
   cancelSubscription(subscriptionId: string, cancelAtPeriodEnd?: boolean): Promise<Subscription | undefined>;
   
   // Payment methods
@@ -203,6 +205,8 @@ export interface IStorage {
   getLocationCount(): Promise<number>;
   getActiveSubscriptionCount(): Promise<number>;
   getTrialSignupCount(): Promise<number>;
+  getMonthlyRevenue(): Promise<number>;
+  getTotalRevenue(): Promise<number>;
 }
 
 export class MemStorage implements IStorage {
@@ -378,6 +382,18 @@ export class MemStorage implements IStorage {
     const user: User = { ...insertUser, id };
     this.users.set(id, user);
     return user;
+  }
+
+  async updateUserPassword(userId: string, hashedPassword: string): Promise<User | undefined> {
+    const user = this.users.get(userId);
+    if (!user) return undefined;
+
+    const updatedUser: User = {
+      ...user,
+      password: hashedPassword
+    };
+    this.users.set(userId, updatedUser);
+    return updatedUser;
   }
 
   // Business methods
@@ -923,6 +939,23 @@ export class MemStorage implements IStorage {
       updatedAt: new Date()
     };
     this.subscriptions.set(subscriptionId, updatedSubscription);
+    return updatedSubscription;
+  }
+
+  async updateSubscriptionByMercadoPagoId(mercadoPagoId: string, updateData: Partial<Subscription>): Promise<Subscription | undefined> {
+    // Find subscription by MercadoPago subscription ID
+    const subscription = Array.from(this.subscriptions.values()).find(
+      sub => sub.mercadoPagoId === mercadoPagoId
+    );
+    
+    if (!subscription) return undefined;
+
+    const updatedSubscription: Subscription = {
+      ...subscription,
+      ...updateData,
+      updatedAt: new Date()
+    };
+    this.subscriptions.set(subscription.id, updatedSubscription);
     return updatedSubscription;
   }
 
@@ -1576,6 +1609,27 @@ export class MemStorage implements IStorage {
 
   async getTrialSignupCount(): Promise<number> {
     return this.trialSignups.size;
+  }
+
+  async getMonthlyRevenue(): Promise<number> {
+    const currentDate = new Date();
+    const currentMonth = currentDate.getMonth();
+    const currentYear = currentDate.getFullYear();
+    
+    return Array.from(this.payments.values())
+      .filter(payment => {
+        const paymentDate = new Date(payment.createdAt);
+        return payment.status === 'approved' && 
+               paymentDate.getMonth() === currentMonth && 
+               paymentDate.getFullYear() === currentYear;
+      })
+      .reduce((total, payment) => total + parseFloat(payment.amount), 0);
+  }
+
+  async getTotalRevenue(): Promise<number> {
+    return Array.from(this.payments.values())
+      .filter(payment => payment.status === 'approved')
+      .reduce((total, payment) => total + parseFloat(payment.amount), 0);
   }
 }
 

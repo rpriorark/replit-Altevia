@@ -5,6 +5,7 @@ import { openaiService } from "./services/openai";
 import { ReputationAnalysisService, type RiskScoreComponents } from "./services/reputation";
 import { mercadoPagoService } from "./services/mercadopago";
 import { sendEmail, sendTrialSignupNotification, sendWelcomeEmail } from "./services/email";
+import { AuthService } from "./services/auth";
 import { 
   generateSEOContentSchema, 
   generateGMBPostSchema, 
@@ -1780,7 +1781,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get trial signups (admin only)
-  app.get("/api/admin/trial-signups", async (req, res) => {
+  app.get("/api/admin/trial-signups", AuthService.requireAdminAuth, async (req, res) => {
     try {
       const { status, limit = 50 } = req.query;
       
@@ -2550,30 +2551,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { username, password } = validationResult.data;
 
-      const adminUser = await storage.getAdminUserByUsername(username);
+      // Use the secure authentication service
+      const session = await AuthService.loginUser(username, password);
       
-      if (!adminUser || adminUser.passwordHash !== password) { // In production, use proper password hashing
+      if (!session) {
         return res.status(401).json({
           error: "Invalid credentials",
           details: "Username or password is incorrect"
         });
       }
 
-      if (!adminUser.isActive) {
-        return res.status(403).json({
-          error: "Account disabled",
-          details: "Admin account has been disabled"
-        });
-      }
-
-      // Don't return password
-      const { passwordHash: _, ...adminProfile } = adminUser;
+      // Set secure session cookie
+      res.cookie('sessionToken', session.sessionToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+      });
       
       res.json({
         message: "Login successful",
-        admin: adminProfile,
-        // In production, generate and return JWT token
-        token: `mock_admin_token_${Date.now()}`
+        user: {
+          id: session.userId,
+          username: session.username
+        },
+        sessionToken: session.sessionToken,
+        expiresAt: session.expiresAt
       });
     } catch (error) {
       console.error("Error during admin login:", error);
@@ -2585,17 +2588,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get system stats (admin only)
-  app.get("/api/admin/stats", async (req, res) => {
-    try {
-      // TODO: Implement proper admin authentication middleware
-      
+  app.get("/api/admin/stats", AuthService.requireAdminAuth, async (req, res) => {
+    try {      
       const stats = {
-        totalUsers: await storage.getUserCount(),
-        totalBusinesses: await storage.getBusinessCount(),
-        totalLocations: await storage.getLocationCount(),
-        activeSubscriptions: await storage.getActiveSubscriptionCount(),
-        trialSignups: await storage.getTrialSignupCount(),
-        systemHealth: "operational"
+        userCount: await storage.getUserCount(),
+        businessCount: await storage.getBusinessCount(),
+        locationCount: await storage.getLocationCount(),
+        activeSubscriptionCount: await storage.getActiveSubscriptionCount(),
+        trialSignupCount: await storage.getTrialSignupCount(),
+        monthlyRevenue: await storage.getMonthlyRevenue(),
+        totalRevenue: await storage.getTotalRevenue()
       };
       
       res.json({ stats });
