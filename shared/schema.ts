@@ -542,3 +542,369 @@ export type IngestReviewsRequest = z.infer<typeof ingestReviewsSchema>;
 export type UpdateThresholdRequest = z.infer<typeof updateThresholdSchema>;
 export type GetThresholdRequest = z.infer<typeof getThresholdSchema>;
 export type AcknowledgeAlertsRequest = z.infer<typeof acknowledgeAlertsSchema>;
+
+// Subscription and Payment Management Tables
+export const subscriptionPlans = pgTable("subscription_plans", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 100 }).notNull(),
+  description: text("description"),
+  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).notNull().default('MXN'),
+  interval: varchar("interval", { length: 20 }).notNull(), // 'monthly', 'yearly'
+  features: text("features").notNull(), // JSON array of features
+  maxLocations: integer("max_locations").default(1),
+  maxUsers: integer("max_users").default(1),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`)
+});
+
+export const subscriptions = pgTable("subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  planId: varchar("plan_id").notNull().references(() => subscriptionPlans.id),
+  mercadoPagoId: varchar("mercado_pago_id", { length: 255 }), // Mercado Pago subscription ID
+  status: varchar("status", { length: 50 }).notNull().default('active'), // 'active', 'cancelled', 'past_due', 'trialing'
+  trialEndsAt: timestamp("trial_ends_at"),
+  currentPeriodStart: timestamp("current_period_start").notNull(),
+  currentPeriodEnd: timestamp("current_period_end").notNull(),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+  cancelledAt: timestamp("cancelled_at"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`)
+});
+
+export const payments = pgTable("payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  subscriptionId: varchar("subscription_id").notNull().references(() => subscriptions.id),
+  mercadoPagoPaymentId: varchar("mercado_pago_payment_id", { length: 255 }),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).notNull().default('MXN'),
+  status: varchar("status", { length: 50 }).notNull(), // 'pending', 'approved', 'rejected', 'cancelled'
+  paymentMethod: varchar("payment_method", { length: 100 }),
+  failureReason: text("failure_reason"),
+  paidAt: timestamp("paid_at"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`)
+});
+
+// Review Source Configuration Tables
+export const reviewSources = pgTable("review_sources", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  locationId: varchar("location_id").notNull().references(() => locations.id),
+  sourceName: varchar("source_name", { length: 50 }).notNull(), // 'google', 'facebook', 'tripadvisor', 'yelp'
+  sourceUrl: text("source_url"),
+  isActive: boolean("is_active").notNull().default(true),
+  apiKey: varchar("api_key", { length: 255 }), // Encrypted API key if needed
+  lastSyncAt: timestamp("last_sync_at"),
+  syncFrequency: integer("sync_frequency").default(24), // hours
+  totalReviews: integer("total_reviews").default(0),
+  averageRating: decimal("average_rating", { precision: 3, scale: 2 }),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`)
+});
+
+// Free Trial Signups Tables
+export const trialSignups = pgTable("trial_signups", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  businessName: varchar("business_name", { length: 255 }).notNull(),
+  contactEmail: varchar("contact_email", { length: 255 }).notNull(),
+  phone: varchar("phone", { length: 20 }),
+  industry: varchar("industry", { length: 100 }),
+  city: varchar("city", { length: 100 }),
+  websiteUrl: varchar("website_url", { length: 255 }),
+  currentReviewPlatforms: text("current_review_platforms"), // JSON array
+  mainChallenges: text("main_challenges"),
+  heardAboutUs: varchar("heard_about_us", { length: 100 }),
+  trialStartDate: timestamp("trial_start_date").notNull().default(sql`now()`),
+  trialEndDate: timestamp("trial_end_date").notNull(),
+  status: varchar("status", { length: 50 }).notNull().default('active'), // 'active', 'converted', 'expired'
+  convertedToUserId: varchar("converted_to_user_id").references(() => users.id),
+  notifiedAdmin: boolean("notified_admin").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`)
+});
+
+// Google My Business Posts Tables
+export const gmbPosts = pgTable("gmb_posts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  locationId: varchar("location_id").notNull().references(() => locations.id),
+  title: varchar("title", { length: 255 }),
+  content: text("content").notNull(),
+  postType: varchar("post_type", { length: 50 }).notNull(), // 'offer', 'event', 'product', 'standard'
+  callToAction: varchar("call_to_action", { length: 50 }), // 'learn_more', 'call', 'order', 'book'
+  buttonUrl: text("button_url"),
+  imageUrl: text("image_url"),
+  scheduledDate: timestamp("scheduled_date"),
+  publishedDate: timestamp("published_date"),
+  status: varchar("status", { length: 50 }).notNull().default('draft'), // 'draft', 'scheduled', 'published', 'failed'
+  gmbPostId: varchar("gmb_post_id", { length: 255 }), // Google My Business post ID
+  engagement: integer("engagement").default(0),
+  clicks: integer("clicks").default(0),
+  views: integer("views").default(0),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`)
+});
+
+// Report Export Tables
+export const reportExports = pgTable("report_exports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  reportType: varchar("report_type", { length: 100 }).notNull(), // 'reputation', 'content_performance', 'competitor_analysis'
+  locationIds: text("location_ids").notNull(), // JSON array of location IDs
+  format: varchar("format", { length: 10 }).notNull(), // 'pdf', 'excel'
+  dateRange: text("date_range").notNull(), // JSON object with start/end dates
+  filters: text("filters"), // JSON object with applied filters
+  status: varchar("status", { length: 50 }).notNull().default('processing'), // 'processing', 'completed', 'failed'
+  fileUrl: text("file_url"), // Download URL for the generated report
+  fileSize: integer("file_size"), // File size in bytes
+  expiresAt: timestamp("expires_at"), // When the download link expires
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`)
+});
+
+// Admin Management Tables
+export const adminUsers = pgTable("admin_users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  username: varchar("username", { length: 100 }).notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  email: varchar("email", { length: 255 }).notNull(),
+  role: varchar("role", { length: 50 }).notNull().default('admin'), // 'admin', 'super_admin'
+  lastLogin: timestamp("last_login"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`)
+});
+
+// Competitor Analysis Enhanced Tables
+export const competitorAnalysis = pgTable("competitor_analysis", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  locationId: varchar("location_id").notNull().references(() => locations.id),
+  competitorName: varchar("competitor_name", { length: 255 }).notNull(),
+  competitorWebsite: varchar("competitor_website", { length: 255 }),
+  analysisType: varchar("analysis_type", { length: 50 }).notNull(), // 'reviews', 'content', 'seo', 'full'
+  analysisData: text("analysis_data").notNull(), // JSON with comprehensive analysis
+  strengthsWeaknesses: text("strengths_weaknesses"), // JSON analysis
+  recommendations: text("recommendations"), // JSON recommendations
+  competitiveScore: integer("competitive_score"), // 0-100 score vs competitor
+  marketPosition: varchar("market_position", { length: 50 }), // 'leader', 'challenger', 'follower', 'niche'
+  analysisDate: timestamp("analysis_date").notNull().default(sql`now()`)
+});
+
+// Relations for new tables
+export const subscriptionPlansRelations = relations(subscriptionPlans, ({ many }) => ({
+  subscriptions: many(subscriptions),
+}));
+
+export const subscriptionsRelations = relations(subscriptions, ({ one, many }) => ({
+  user: one(users, {
+    fields: [subscriptions.userId],
+    references: [users.id],
+  }),
+  plan: one(subscriptionPlans, {
+    fields: [subscriptions.planId],
+    references: [subscriptionPlans.id],
+  }),
+  payments: many(payments),
+}));
+
+export const paymentsRelations = relations(payments, ({ one }) => ({
+  subscription: one(subscriptions, {
+    fields: [payments.subscriptionId],
+    references: [subscriptions.id],
+  }),
+}));
+
+export const reviewSourcesRelations = relations(reviewSources, ({ one }) => ({
+  location: one(locations, {
+    fields: [reviewSources.locationId],
+    references: [locations.id],
+  }),
+}));
+
+export const trialSignupsRelations = relations(trialSignups, ({ one }) => ({
+  convertedUser: one(users, {
+    fields: [trialSignups.convertedToUserId],
+    references: [users.id],
+  }),
+}));
+
+export const gmbPostsRelations = relations(gmbPosts, ({ one }) => ({
+  location: one(locations, {
+    fields: [gmbPosts.locationId],
+    references: [locations.id],
+  }),
+}));
+
+export const reportExportsRelations = relations(reportExports, ({ one }) => ({
+  user: one(users, {
+    fields: [reportExports.userId],
+    references: [users.id],
+  }),
+}));
+
+export const competitorAnalysisRelations = relations(competitorAnalysis, ({ one }) => ({
+  location: one(locations, {
+    fields: [competitorAnalysis.locationId],
+    references: [locations.id],
+  }),
+}));
+
+// Insert schemas for new tables
+export const insertSubscriptionPlanSchema = createInsertSchema(subscriptionPlans).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPaymentSchema = createInsertSchema(payments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertReviewSourceSchema = createInsertSchema(reviewSources).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertTrialSignupSchema = createInsertSchema(trialSignups).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertGmbPostSchema = createInsertSchema(gmbPosts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertReportExportSchema = createInsertSchema(reportExports).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertAdminUserSchema = createInsertSchema(adminUsers).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertCompetitorAnalysisSchema = createInsertSchema(competitorAnalysis).omit({
+  id: true,
+  analysisDate: true,
+});
+
+// API Schemas for new functionality
+
+// Subscription and Payment Schemas
+export const createSubscriptionSchema = z.object({
+  planId: z.string().min(1, "Plan ID is required"),
+  paymentMethodId: z.string().min(1, "Payment method ID is required"),
+  trialDays: z.number().min(0).max(30).optional()
+});
+
+export const mercadoPagoWebhookSchema = z.object({
+  action: z.string(),
+  api_version: z.string(),
+  data: z.object({
+    id: z.string()
+  }),
+  date_created: z.string(),
+  id: z.number(),
+  live_mode: z.boolean(),
+  type: z.string(),
+  user_id: z.string()
+});
+
+// Review Source Configuration Schemas
+export const configureReviewSourceSchema = z.object({
+  locationId: z.string().min(1, "Location ID is required"),
+  sourceName: z.enum(["google", "facebook", "tripadvisor", "yelp", "custom"]),
+  sourceUrl: z.string().url().optional(),
+  apiKey: z.string().optional(),
+  syncFrequency: z.number().min(1).max(168).default(24) // 1 hour to 1 week
+});
+
+// Free Trial Signup Schema
+export const trialSignupSchema = z.object({
+  businessName: z.string().min(1, "Nombre del negocio es requerido").max(255),
+  contactEmail: z.string().email("Email válido es requerido"),
+  phone: z.string().max(20).optional(),
+  industry: z.string().max(100).optional(),
+  city: z.string().max(100).optional(),
+  websiteUrl: z.string().url().optional(),
+  currentReviewPlatforms: z.array(z.string()).optional(),
+  mainChallenges: z.string().max(1000).optional(),
+  heardAboutUs: z.string().max(100).optional()
+});
+
+// GMB Post Creation Schema
+export const createGmbPostSchema = z.object({
+  locationId: z.string().min(1, "Location ID is required"),
+  title: z.string().max(255).optional(),
+  content: z.string().min(1, "Content is required").max(1500),
+  postType: z.enum(["offer", "event", "product", "standard"]).default("standard"),
+  callToAction: z.enum(["learn_more", "call", "order", "book"]).optional(),
+  buttonUrl: z.string().url().optional(),
+  imageUrl: z.string().url().optional(),
+  scheduledDate: z.string().datetime().optional()
+});
+
+// Report Export Schema
+export const exportReportSchema = z.object({
+  reportType: z.enum(["reputation", "content_performance", "competitor_analysis"]),
+  locationIds: z.array(z.string()).min(1, "At least one location is required"),
+  format: z.enum(["pdf", "excel"]).default("pdf"),
+  dateRange: z.object({
+    startDate: z.string().date(),
+    endDate: z.string().date()
+  }),
+  filters: z.record(z.any()).optional()
+});
+
+// Admin Authentication Schema
+export const adminLoginSchema = z.object({
+  username: z.string().min(1, "Username is required"),
+  password: z.string().min(1, "Password is required")
+});
+
+// Competitor Analysis Schema
+export const enhancedCompetitorAnalysisSchema = z.object({
+  locationId: z.string().min(1, "Location ID is required"),
+  competitorName: z.string().min(1, "Competitor name is required"),
+  competitorWebsite: z.string().url().optional(),
+  analysisType: z.enum(["reviews", "content", "seo", "full"]).default("full")
+});
+
+// Type exports for new schemas
+export type InsertSubscriptionPlan = z.infer<typeof insertSubscriptionPlanSchema>;
+export type SubscriptionPlan = typeof subscriptionPlans.$inferSelect;
+export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
+export type Subscription = typeof subscriptions.$inferSelect;
+export type InsertPayment = z.infer<typeof insertPaymentSchema>;
+export type Payment = typeof payments.$inferSelect;
+export type InsertReviewSource = z.infer<typeof insertReviewSourceSchema>;
+export type ReviewSource = typeof reviewSources.$inferSelect;
+export type InsertTrialSignup = z.infer<typeof insertTrialSignupSchema>;
+export type TrialSignup = typeof trialSignups.$inferSelect;
+export type InsertGmbPost = z.infer<typeof insertGmbPostSchema>;
+export type GmbPost = typeof gmbPosts.$inferSelect;
+export type InsertReportExport = z.infer<typeof insertReportExportSchema>;
+export type ReportExport = typeof reportExports.$inferSelect;
+export type InsertAdminUser = z.infer<typeof insertAdminUserSchema>;
+export type AdminUser = typeof adminUsers.$inferSelect;
+export type InsertCompetitorAnalysis = z.infer<typeof insertCompetitorAnalysisSchema>;
+export type CompetitorAnalysisRecord = typeof competitorAnalysis.$inferSelect;
+
+// API Request Types
+export type CreateSubscriptionRequest = z.infer<typeof createSubscriptionSchema>;
+export type MercadoPagoWebhookRequest = z.infer<typeof mercadoPagoWebhookSchema>;
+export type ConfigureReviewSourceRequest = z.infer<typeof configureReviewSourceSchema>;
+export type TrialSignupRequest = z.infer<typeof trialSignupSchema>;
+export type CreateGmbPostRequest = z.infer<typeof createGmbPostSchema>;
+export type ExportReportRequest = z.infer<typeof exportReportSchema>;
+export type AdminLoginRequest = z.infer<typeof adminLoginSchema>;
+export type EnhancedCompetitorAnalysisRequest = z.infer<typeof enhancedCompetitorAnalysisSchema>;
