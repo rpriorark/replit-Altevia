@@ -6,7 +6,8 @@ import {
   Settings, 
   CreditCard,
   Users,
-  Lightbulb 
+  Lightbulb,
+  Calendar
 } from "lucide-react";
 import {
   Sidebar,
@@ -31,6 +32,11 @@ const menuItems = [
     title: "Generador SEO",
     url: "/seo-generator",
     icon: TrendingUp,
+  },
+  {
+    title: "Calendario de Contenido",
+    url: "/content-calendar",
+    icon: Calendar,
   },
   {
     title: "Gestión de Reseñas",

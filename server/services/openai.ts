@@ -686,6 +686,468 @@ Responde en formato JSON con la siguiente estructura:
       suggestedResponseApproach: result.suggestedResponseApproach || "Respuesta estándar empática"
     };
   }
+
+  // Content Calendar Generation Methods
+
+  // Generate a complete monthly content calendar
+  async generateContentCalendar(options: {
+    businessInfo: string;
+    location: string;
+    month: number;
+    year: number;
+    platforms: string[];
+    contentTypes?: string[];
+    includeHolidays?: boolean;
+    includeLocalEvents?: boolean;
+    customKeywords?: string[];
+  }): Promise<{
+    posts: Array<{
+      date: string;
+      platform: string;
+      contentType: string;
+      title: string;
+      content: string;
+      hashtags: string[];
+      keywords: string[];
+      imagePrompt?: string;
+      optimalTime: string;
+    }>;
+    summary: {
+      totalPosts: number;
+      postsByPlatform: Record<string, number>;
+      postsByType: Record<string, number>;
+    };
+  }> {
+    this.validateApiKey();
+
+    const {
+      businessInfo,
+      location,
+      month,
+      year,
+      platforms,
+      contentTypes = ['promotional', 'educational', 'engagement', 'seasonal'],
+      includeHolidays = true,
+      includeLocalEvents = true,
+      customKeywords = []
+    } = options;
+
+    const monthName = new Date(year, month - 1).toLocaleString('es-ES', { month: 'long' });
+    const daysInMonth = new Date(year, month, 0).getDate();
+
+    const prompt = `
+Genera un calendario completo de contenido para ${monthName} ${year} con las siguientes especificaciones:
+
+INFORMACIÓN DEL NEGOCIO: ${businessInfo}
+UBICACIÓN: ${location}
+PLATAFORMAS: ${platforms.join(', ')}
+TIPOS DE CONTENIDO: ${contentTypes.join(', ')}
+INCLUIR DÍAS FESTIVOS: ${includeHolidays ? 'Sí' : 'No'}
+INCLUIR EVENTOS LOCALES: ${includeLocalEvents ? 'Sí' : 'No'}
+PALABRAS CLAVE PERSONALIZADAS: ${customKeywords.join(', ') || 'Ninguna'}
+
+INSTRUCCIONES ESPECÍFICAS:
+1. Crear contenido diverso y atractivo para todo el mes
+2. Considerar días festivos mexicanos y fechas especiales del mes
+3. Adaptar el contenido al tipo de negocio y audiencia local
+4. Variar tipos de contenido: 40% promocional, 30% educativo, 20% engagement, 10% estacional
+5. Frecuencias recomendadas:
+   - Google My Business: 4-5 posts/semana
+   - Facebook: 3-4 posts/semana  
+   - Instagram: 5-7 posts/semana
+   - LinkedIn: 2-3 posts/semana
+   - Blog: 1-2 posts/semana
+
+6. Horarios óptimos sugeridos:
+   - GMB: 8:00-10:00, 18:00-20:00
+   - Facebook: 9:00-11:00, 15:00-17:00
+   - Instagram: 11:00-13:00, 19:00-21:00
+   - LinkedIn: 8:00-9:00, 17:00-18:00
+   - Blog: 10:00-12:00
+
+7. Incluir prompts para imágenes cuando sea relevante
+8. Generar hashtags específicos y palabras clave SEO
+9. Considerar tendencias estacionales y eventos especiales
+
+Responde en formato JSON con la siguiente estructura:
+{
+  "posts": [
+    {
+      "date": "YYYY-MM-DD",
+      "platform": "gmb|facebook|instagram|linkedin|blog",
+      "contentType": "promotional|educational|engagement|seasonal",
+      "title": "título del post",
+      "content": "contenido completo del post",
+      "hashtags": ["#hashtag1", "#hashtag2"],
+      "keywords": ["palabra1", "palabra2"],
+      "imagePrompt": "descripción para generar imagen (opcional)",
+      "optimalTime": "HH:MM"
+    }
+  ],
+  "summary": {
+    "totalPosts": number,
+    "postsByPlatform": {"platform": count},
+    "postsByType": {"type": count}
+  }
+}
+    `;
+
+    try {
+      const response = await openai.chat.completions.create({
+        model: this.model,
+        messages: [
+          {
+            role: "system",
+            content: "Eres un experto en marketing digital y gestión de contenido para negocios locales. Tu especialidad es crear calendarios de contenido estratégicos que maximizan el engagement y la visibilidad local, considerando estacionalidad, tendencias y comportamiento de audiencia."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.7,
+        max_tokens: 4000
+      });
+
+      const result = JSON.parse(response.choices[0].message.content || "{}");
+      return this.validateContentCalendarResult(result);
+    } catch (error) {
+      console.error("Error generating content calendar:", error);
+      throw this.handleOpenAIError(error);
+    }
+  }
+
+  // Generate seasonal content suggestions
+  async generateSeasonalContent(options: {
+    businessInfo: string;
+    location: string;
+    season: 'spring' | 'summer' | 'fall' | 'winter' | 'holiday';
+    platform: string;
+    contentType: string;
+    includeLocalEvents?: boolean;
+    customTheme?: string;
+  }): Promise<{
+    title: string;
+    content: string;
+    hashtags: string[];
+    keywords: string[];
+    imagePrompt?: string;
+    seasonalTips: string[];
+  }> {
+    this.validateApiKey();
+
+    const {
+      businessInfo,
+      location,
+      season,
+      platform,
+      contentType,
+      includeLocalEvents = true,
+      customTheme
+    } = options;
+
+    const seasonPrompts = {
+      spring: "primavera, renovación, crecimiento, frescura, nuevos comienzos",
+      summer: "verano, vacaciones, calor, diversión, actividades al aire libre",
+      fall: "otoño, cambios, preparación, regreso a clases, temporada de negocios",
+      winter: "invierno, festividades, reflexión, año nuevo, planificación",
+      holiday: "días festivos, celebraciones, tradiciones, reuniones familiares, temporada especial"
+    };
+
+    const prompt = `
+Genera contenido estacional específico para ${season} con las siguientes especificaciones:
+
+INFORMACIÓN DEL NEGOCIO: ${businessInfo}
+UBICACIÓN: ${location}
+TEMPORADA: ${season} (${seasonPrompts[season]})
+PLATAFORMA: ${platform}
+TIPO DE CONTENIDO: ${contentType}
+INCLUIR EVENTOS LOCALES: ${includeLocalEvents ? 'Sí' : 'No'}
+${customTheme ? `TEMA PERSONALIZADO: ${customTheme}` : ''}
+
+INSTRUCCIONES:
+1. Crear contenido que capture la esencia de la temporada
+2. Considerar tradiciones mexicanas y eventos locales relevantes
+3. Adaptar el tono y mensaje a la plataforma específica
+4. Incluir llamadas a la acción apropiadas para la temporada
+5. Generar hashtags estacionales y tendencias actuales
+6. Proporcionar consejos específicos para aprovechar la temporada
+
+Ajustar según el tipo de contenido:
+- Promocional: Ofertas especiales, promociones estacionales
+- Educativo: Tips relevantes para la temporada
+- Engagement: Preguntas interactivas sobre la temporada
+- Estacional: Contenido puramente temático de la época
+
+Responde en formato JSON:
+{
+  "title": "título atractivo del post",
+  "content": "contenido completo adaptado a la plataforma",
+  "hashtags": ["hashtags estacionales y relevantes"],
+  "keywords": ["palabras clave SEO estacionales"],
+  "imagePrompt": "descripción detallada para generar imagen estacional",
+  "seasonalTips": ["consejo1", "consejo2", "consejo3"]
+}
+    `;
+
+    try {
+      const response = await openai.chat.completions.create({
+        model: this.model,
+        messages: [
+          {
+            role: "system",
+            content: "Eres un especialista en marketing estacional y contenido temático para negocios locales. Comprendes las nuances culturales mexicanas y sabes cómo aprovechar cada temporada para maximizar el engagement y las ventas."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.8,
+        max_tokens: 1500
+      });
+
+      const result = JSON.parse(response.choices[0].message.content || "{}");
+      return this.validateSeasonalContentResult(result);
+    } catch (error) {
+      console.error("Error generating seasonal content:", error);
+      throw this.handleOpenAIError(error);
+    }
+  }
+
+  // Analyze optimal posting times based on business and location
+  async analyzeOptimalPostingTimes(options: {
+    businessInfo: string;
+    location: string;
+    platforms: string[];
+    targetAudience?: string;
+  }): Promise<{
+    recommendations: Record<string, {
+      optimal_times: string[];
+      frequency_per_week: number;
+      best_days: string[];
+      content_mix: Record<string, number>;
+      reasoning: string;
+    }>;
+    generalTips: string[];
+  }> {
+    this.validateApiKey();
+
+    const { businessInfo, location, platforms, targetAudience } = options;
+
+    const prompt = `
+Analiza y recomienda los horarios óptimos de publicación para las siguientes especificaciones:
+
+INFORMACIÓN DEL NEGOCIO: ${businessInfo}
+UBICACIÓN: ${location}
+PLATAFORMAS: ${platforms.join(', ')}
+${targetAudience ? `AUDIENCIA OBJETIVO: ${targetAudience}` : ''}
+
+INSTRUCCIONES:
+1. Considerar la zona horaria de México y hábitos locales de consumo digital
+2. Analizar el tipo de negocio para entender cuándo la audiencia está más activa
+3. Recomendar frecuencias específicas por plataforma
+4. Sugerir los mejores días de la semana para cada plataforma
+5. Proporcionar mezcla de contenido óptima (% de cada tipo)
+6. Justificar las recomendaciones con razonamiento claro
+
+Considera estos factores:
+- Horarios laborales típicos en México
+- Patrones de uso de redes sociales por plataforma
+- Tipo de audiencia del negocio (B2B vs B2C)
+- Comportamiento de compra local
+- Competencia por atención en diferentes horarios
+
+Responde en formato JSON:
+{
+  "recommendations": {
+    "platform_name": {
+      "optimal_times": ["HH:MM", "HH:MM"],
+      "frequency_per_week": number,
+      "best_days": ["lunes", "martes"],
+      "content_mix": {
+        "promotional": percentage,
+        "educational": percentage,
+        "engagement": percentage,
+        "seasonal": percentage
+      },
+      "reasoning": "explicación detallada"
+    }
+  },
+  "generalTips": ["tip1", "tip2", "tip3"]
+}
+    `;
+
+    try {
+      const response = await openai.chat.completions.create({
+        model: this.model,
+        messages: [
+          {
+            role: "system",
+            content: "Eres un experto en timing de marketing digital y análisis de audiencia para el mercado mexicano. Comprendes los patrones de comportamiento digital local y sabes optimizar la programación de contenido para maximizar alcance y engagement."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.6,
+        max_tokens: 2000
+      });
+
+      const result = JSON.parse(response.choices[0].message.content || "{}");
+      return this.validatePostingTimesResult(result);
+    } catch (error) {
+      console.error("Error analyzing optimal posting times:", error);
+      throw this.handleOpenAIError(error);
+    }
+  }
+
+  // Content optimization suggestions
+  async generateContentSuggestions(options: {
+    businessInfo: string;
+    location: string;
+    currentPerformance?: Record<string, number>;
+    goals?: string[];
+  }): Promise<{
+    suggestions: Array<{
+      category: string;
+      title: string;
+      description: string;
+      priority: 'high' | 'medium' | 'low';
+      implementation: string;
+      expectedImpact: string;
+    }>;
+    contentIdeas: string[];
+    trendingTopics: string[];
+  }> {
+    this.validateApiKey();
+
+    const { businessInfo, location, currentPerformance, goals = [] } = options;
+
+    const prompt = `
+Genera sugerencias estratégicas de contenido basadas en:
+
+INFORMACIÓN DEL NEGOCIO: ${businessInfo}
+UBICACIÓN: ${location}
+${currentPerformance ? `RENDIMIENTO ACTUAL: ${JSON.stringify(currentPerformance)}` : ''}
+${goals.length > 0 ? `OBJETIVOS: ${goals.join(', ')}` : ''}
+
+INSTRUCCIONES:
+1. Analizar oportunidades de mejora en la estrategia de contenido
+2. Sugerir ideas específicas para aumentar engagement y conversiones
+3. Identificar tendencias relevantes para el negocio y ubicación
+4. Priorizar sugerencias por impacto potencial y facilidad de implementación
+5. Considerar la competencia local y oportunidades de diferenciación
+
+Genera sugerencias en estas categorías:
+- Optimización de contenido existente
+- Nuevos formatos y tipos de contenido
+- Colaboraciones y partnerships locales
+- Aprovechamiento de tendencias
+- Contenido estacional y eventos especiales
+- Mejoras en engagement y call-to-actions
+
+Responde en formato JSON:
+{
+  "suggestions": [
+    {
+      "category": "categoría de la sugerencia",
+      "title": "título conciso",
+      "description": "descripción detallada",
+      "priority": "high|medium|low",
+      "implementation": "pasos para implementar",
+      "expectedImpact": "impacto esperado"
+    }
+  ],
+  "contentIdeas": ["idea1", "idea2", "idea3"],
+  "trendingTopics": ["tendencia1", "tendencia2", "tendencia3"]
+}
+    `;
+
+    try {
+      const response = await openai.chat.completions.create({
+        model: this.model,
+        messages: [
+          {
+            role: "system",
+            content: "Eres un consultor estratégico de marketing digital especializado en negocios locales mexicanos. Tu experiencia abarca análisis de tendencias, optimización de contenido y estrategias de crecimiento orgánico."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.7,
+        max_tokens: 2500
+      });
+
+      const result = JSON.parse(response.choices[0].message.content || "{}");
+      return this.validateContentSuggestionsResult(result);
+    } catch (error) {
+      console.error("Error generating content suggestions:", error);
+      throw this.handleOpenAIError(error);
+    }
+  }
+
+  // Validation methods for new functionality
+  private validateContentCalendarResult(result: any): any {
+    return {
+      posts: Array.isArray(result.posts) ? result.posts.map((post: any) => ({
+        date: post.date || new Date().toISOString().split('T')[0],
+        platform: post.platform || 'gmb',
+        contentType: post.contentType || 'promotional',
+        title: post.title || '',
+        content: post.content || '',
+        hashtags: Array.isArray(post.hashtags) ? post.hashtags : [],
+        keywords: Array.isArray(post.keywords) ? post.keywords : [],
+        imagePrompt: post.imagePrompt || '',
+        optimalTime: post.optimalTime || '10:00'
+      })) : [],
+      summary: {
+        totalPosts: result.summary?.totalPosts || 0,
+        postsByPlatform: result.summary?.postsByPlatform || {},
+        postsByType: result.summary?.postsByType || {}
+      }
+    };
+  }
+
+  private validateSeasonalContentResult(result: any): any {
+    return {
+      title: result.title || '',
+      content: result.content || '',
+      hashtags: Array.isArray(result.hashtags) ? result.hashtags : [],
+      keywords: Array.isArray(result.keywords) ? result.keywords : [],
+      imagePrompt: result.imagePrompt || '',
+      seasonalTips: Array.isArray(result.seasonalTips) ? result.seasonalTips : []
+    };
+  }
+
+  private validatePostingTimesResult(result: any): any {
+    return {
+      recommendations: result.recommendations || {},
+      generalTips: Array.isArray(result.generalTips) ? result.generalTips : []
+    };
+  }
+
+  private validateContentSuggestionsResult(result: any): any {
+    return {
+      suggestions: Array.isArray(result.suggestions) ? result.suggestions.map((suggestion: any) => ({
+        category: suggestion.category || '',
+        title: suggestion.title || '',
+        description: suggestion.description || '',
+        priority: ['high', 'medium', 'low'].includes(suggestion.priority) ? suggestion.priority : 'medium',
+        implementation: suggestion.implementation || '',
+        expectedImpact: suggestion.expectedImpact || ''
+      })) : [],
+      contentIdeas: Array.isArray(result.contentIdeas) ? result.contentIdeas : [],
+      trendingTopics: Array.isArray(result.trendingTopics) ? result.trendingTopics : []
+    };
+  }
 }
 
 export const openaiService = new OpenAIService();

@@ -84,6 +84,8 @@ export const locationsRelations = relations(locations, ({ one, many }) => ({
     references: [businesses.id],
   }),
   seoProjects: many(seoProjects),
+  contentCalendarPosts: many(contentCalendarPosts),
+  postingSchedules: many(postingSchedules),
 }));
 
 export const seoProjectsRelations = relations(seoProjects, ({ one }) => ({
@@ -92,6 +94,81 @@ export const seoProjectsRelations = relations(seoProjects, ({ one }) => ({
     references: [locations.id],
   }),
 }));
+
+// Content Calendar Tables
+export const contentCalendarPosts = pgTable("content_calendar_posts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  locationId: varchar("location_id").notNull().references(() => locations.id),
+  title: varchar("title", { length: 255 }).notNull(),
+  content: text("content").notNull(),
+  platform: varchar("platform", { length: 50 }).notNull(), // 'gmb', 'facebook', 'instagram', 'blog', 'linkedin'
+  contentType: varchar("content_type", { length: 100 }).notNull(), // 'promotional', 'educational', 'engagement', 'seasonal'
+  scheduledDate: timestamp("scheduled_date").notNull(),
+  status: varchar("status", { length: 50 }).notNull().default('suggested'), // 'suggested', 'approved', 'published', 'rejected'
+  isGenerated: boolean("is_generated").notNull().default(true), // true if AI-generated
+  templateId: varchar("template_id").references(() => contentTemplates.id),
+  keywords: text("keywords"), // JSON array of keywords
+  hashtags: text("hashtags"), // JSON array of hashtags
+  imagePrompt: text("image_prompt"), // AI image generation prompt
+  publishedAt: timestamp("published_at"),
+  engagement: integer("engagement").default(0), // likes, shares, etc.
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`)
+});
+
+export const contentTemplates = pgTable("content_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 255 }).notNull(),
+  industry: varchar("industry", { length: 100 }).notNull(),
+  platform: varchar("platform", { length: 50 }).notNull(),
+  contentType: varchar("content_type", { length: 100 }).notNull(),
+  template: text("template").notNull(), // Template with placeholders like {{businessName}}, {{season}}
+  description: text("description"),
+  isActive: boolean("is_active").notNull().default(true),
+  usageCount: integer("usage_count").default(0),
+  tags: text("tags"), // JSON array of tags for categorization
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`)
+});
+
+export const postingSchedules = pgTable("posting_schedules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  locationId: varchar("location_id").notNull().references(() => locations.id),
+  platform: varchar("platform", { length: 50 }).notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  frequency: integer("frequency").notNull(), // posts per week
+  preferredDays: text("preferred_days"), // JSON array of preferred days [1,2,3,4,5] (Monday=1)
+  preferredTimes: text("preferred_times"), // JSON array of preferred hours [9, 12, 15, 18]
+  timezone: varchar("timezone", { length: 50 }).notNull().default('America/Mexico_City'),
+  autoApprove: boolean("auto_approve").notNull().default(false),
+  lastGeneratedAt: timestamp("last_generated_at"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`)
+});
+
+// Content Calendar Relations
+export const contentCalendarPostsRelations = relations(contentCalendarPosts, ({ one }) => ({
+  location: one(locations, {
+    fields: [contentCalendarPosts.locationId],
+    references: [locations.id],
+  }),
+  template: one(contentTemplates, {
+    fields: [contentCalendarPosts.templateId],
+    references: [contentTemplates.id],
+  }),
+}));
+
+export const contentTemplatesRelations = relations(contentTemplates, ({ many }) => ({
+  posts: many(contentCalendarPosts),
+}));
+
+export const postingSchedulesRelations = relations(postingSchedules, ({ one }) => ({
+  location: one(locations, {
+    fields: [postingSchedules.locationId],
+    references: [locations.id],
+  }),
+}));
+
 
 // Insert schemas
 export const insertBusinessSchema = createInsertSchema(businesses).omit({
@@ -112,12 +189,36 @@ export const insertSeoProjectSchema = createInsertSchema(seoProjects).omit({
   updatedAt: true,
 });
 
+export const insertContentCalendarPostSchema = createInsertSchema(contentCalendarPosts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertContentTemplateSchema = createInsertSchema(contentTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPostingScheduleSchema = createInsertSchema(postingSchedules).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export type InsertBusiness = z.infer<typeof insertBusinessSchema>;
 export type Business = typeof businesses.$inferSelect;
 export type InsertLocation = z.infer<typeof insertLocationSchema>;
 export type Location = typeof locations.$inferSelect;
 export type InsertSeoProject = z.infer<typeof insertSeoProjectSchema>;
 export type SeoProject = typeof seoProjects.$inferSelect;
+export type InsertContentCalendarPost = z.infer<typeof insertContentCalendarPostSchema>;
+export type ContentCalendarPost = typeof contentCalendarPosts.$inferSelect;
+export type InsertContentTemplate = z.infer<typeof insertContentTemplateSchema>;
+export type ContentTemplate = typeof contentTemplates.$inferSelect;
+export type InsertPostingSchedule = z.infer<typeof insertPostingScheduleSchema>;
+export type PostingSchedule = typeof postingSchedules.$inferSelect;
 
 // SEO Content Generation Schemas
 export const generateSEOContentSchema = z.object({
@@ -186,3 +287,62 @@ export type AnalyzeCompetitorsRequest = z.infer<typeof analyzeCompetitorsSchema>
 export type GenerateReviewResponseRequest = z.infer<typeof generateReviewResponseSchema>;
 export type DetectConflictiveReviewRequest = z.infer<typeof detectConflictiveReviewSchema>;
 export type ConflictDetectionResult = z.infer<typeof conflictDetectionResultSchema>;
+
+// Content Calendar API Schemas
+export const generateContentCalendarSchema = z.object({
+  locationId: z.string().min(1, "Location ID is required"),
+  month: z.number().min(1).max(12),
+  year: z.number().min(2024).max(2030),
+  platforms: z.array(z.enum(["gmb", "facebook", "instagram", "blog", "linkedin"])).min(1, "At least one platform is required"),
+  contentTypes: z.array(z.enum(["promotional", "educational", "engagement", "seasonal"])).optional(),
+  includeHolidays: z.boolean().default(true),
+  includeLocalEvents: z.boolean().default(true),
+  customKeywords: z.array(z.string()).max(20, "Cannot specify more than 20 custom keywords").optional()
+});
+
+export const updatePostingScheduleSchema = z.object({
+  locationId: z.string().min(1, "Location ID is required"),
+  platform: z.enum(["gmb", "facebook", "instagram", "blog", "linkedin"]),
+  frequency: z.number().min(1).max(14), // posts per week
+  preferredDays: z.array(z.number().min(1).max(7)).min(1, "At least one preferred day is required").max(7),
+  preferredTimes: z.array(z.number().min(0).max(23)).min(1, "At least one preferred time is required").max(10),
+  timezone: z.string().default('America/Mexico_City'),
+  autoApprove: z.boolean().default(false)
+});
+
+export const updatePostStatusSchema = z.object({
+  postId: z.string().min(1, "Post ID is required"),
+  status: z.enum(["suggested", "approved", "published", "rejected"]),
+  feedback: z.string().max(500, "Feedback cannot exceed 500 characters").optional()
+});
+
+export const editPostContentSchema = z.object({
+  postId: z.string().min(1, "Post ID is required"),
+  title: z.string().min(1, "Title is required").max(255, "Title cannot exceed 255 characters"),
+  content: z.string().min(1, "Content is required").max(2000, "Content cannot exceed 2000 characters"),
+  hashtags: z.array(z.string().max(50)).max(10, "Cannot have more than 10 hashtags").optional(),
+  keywords: z.array(z.string().max(100)).max(20, "Cannot have more than 20 keywords").optional(),
+  imagePrompt: z.string().max(500, "Image prompt cannot exceed 500 characters").optional(),
+  scheduledDate: z.string().datetime().optional()
+});
+
+export const bulkApprovePostsSchema = z.object({
+  postIds: z.array(z.string()).min(1, "At least one post ID is required").max(50, "Cannot approve more than 50 posts at once"),
+  action: z.enum(["approve", "reject"])
+});
+
+export const generateSeasonalContentSchema = z.object({
+  locationId: z.string().min(1, "Location ID is required"),
+  season: z.enum(["spring", "summer", "fall", "winter", "holiday"]),
+  platform: z.enum(["gmb", "facebook", "instagram", "blog", "linkedin"]),
+  contentType: z.enum(["promotional", "educational", "engagement", "seasonal"]),
+  includeLocalEvents: z.boolean().default(true),
+  customTheme: z.string().max(200, "Custom theme cannot exceed 200 characters").optional()
+});
+
+export type GenerateContentCalendarRequest = z.infer<typeof generateContentCalendarSchema>;
+export type UpdatePostingScheduleRequest = z.infer<typeof updatePostingScheduleSchema>;
+export type UpdatePostStatusRequest = z.infer<typeof updatePostStatusSchema>;
+export type EditPostContentRequest = z.infer<typeof editPostContentSchema>;
+export type BulkApprovePostsRequest = z.infer<typeof bulkApprovePostsSchema>;
+export type GenerateSeasonalContentRequest = z.infer<typeof generateSeasonalContentSchema>;

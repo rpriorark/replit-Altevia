@@ -10,6 +10,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 import LandingPage from "@/components/LandingPage";
 import Dashboard from "@/components/Dashboard";
 import SEOGenerator from "@/components/SEOGenerator";
+import ContentCalendar from "@/components/ContentCalendar";
 import { ReviewManager } from "@/components/ReviewManager";
 import { MultiLocationDashboard } from "@/components/MultiLocationDashboard";
 import Analytics from "@/components/Analytics";
@@ -49,6 +50,12 @@ function Router() {
       <Route path="/seo-generator">
         <DashboardLayout>
           <SEOGenerator />
+        </DashboardLayout>
+      </Route>
+      
+      <Route path="/content-calendar">
+        <DashboardLayout>
+          <ContentCalendar />
         </DashboardLayout>
       </Route>
       
