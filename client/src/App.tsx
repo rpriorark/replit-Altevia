@@ -11,6 +11,7 @@ import LandingPage from "@/components/LandingPage";
 import Dashboard from "@/components/Dashboard";
 import SEOGenerator from "@/components/SEOGenerator";
 import { ReviewManager } from "@/components/ReviewManager";
+import { MultiLocationDashboard } from "@/components/MultiLocationDashboard";
 import Analytics from "@/components/Analytics";
 import AISuggestions from "@/components/AISuggestions";
 import Billing from "@/components/Billing";
@@ -54,6 +55,12 @@ function Router() {
       <Route path="/reviews">
         <DashboardLayout>
           <ReviewManager />
+        </DashboardLayout>
+      </Route>
+      
+      <Route path="/locations">
+        <DashboardLayout>
+          <MultiLocationDashboard />
         </DashboardLayout>
       </Route>
       
