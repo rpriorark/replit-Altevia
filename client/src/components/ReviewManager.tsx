@@ -147,19 +147,22 @@ export function ReviewManager() {
     setIsGenerating(true);
     
     try {
-      const response = await apiRequest("POST", "/api/reviews/generate-response", {
-        businessName,
-        businessType,
-        reviewText,
-        rating,
-        reviewerName: reviewerName || undefined,
-        responseStyle,
-        includeApology,
-        includeCallToAction,
-        customInstructions: customInstructions || undefined,
-        legalMode,
-        industryType: legalMode ? industryType : undefined,
-        conflictLevel: conflictDetection?.conflictLevel
+      const response = await apiRequest("/api/reviews/generate-response", {
+        method: "POST",
+        data: {
+          businessName,
+          businessType,
+          reviewText,
+          rating,
+          reviewerName: reviewerName || undefined,
+          responseStyle,
+          includeApology,
+          includeCallToAction,
+          customInstructions: customInstructions || undefined,
+          legalMode,
+          industryType: legalMode ? industryType : undefined,
+          conflictLevel: conflictDetection?.conflictLevel
+        }
       });
 
       const result = await response.json();

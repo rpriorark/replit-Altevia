@@ -103,16 +103,19 @@ const SEOGenerator = () => {
 
     setIsGenerating(true);
     try {
-      const response = await apiRequest("POST", "/api/seo/generate-content", {
-        contentType,
-        keywords,
-        businessInfo,
-        location: location || undefined,
-        businessType: businessType || undefined,
-        targetAudience: targetAudience || undefined,
-        competitors: competitors.length > 0 ? competitors : undefined,
-        localEvents: localEvents.length > 0 ? localEvents : undefined,
-        voiceSearchOptimized
+      const response = await apiRequest("/api/seo/generate-content", {
+        method: "POST",
+        data: {
+          contentType,
+          keywords,
+          businessInfo,
+          location: location || undefined,
+          businessType: businessType || undefined,
+          targetAudience: targetAudience || undefined,
+          competitors: competitors.length > 0 ? competitors : undefined,
+          localEvents: localEvents.length > 0 ? localEvents : undefined,
+          voiceSearchOptimized
+        }
       });
       
       const result = await response.json();
@@ -145,10 +148,13 @@ const SEOGenerator = () => {
 
     setIsGeneratingGMB(true);
     try {
-      const response = await apiRequest("POST", "/api/seo/generate-gmb-post", {
-        businessInfo,
-        occasion: localEvents[0] || "promoción especial",
-        location
+      const response = await apiRequest("/api/seo/generate-gmb-post", {
+        method: "POST",
+        data: {
+          businessInfo,
+          occasion: localEvents[0] || "promoción especial",
+          location
+        }
       });
       
       const result = await response.json();
@@ -181,10 +187,13 @@ const SEOGenerator = () => {
 
     setIsAnalyzingCompetitors(true);
     try {
-      const response = await apiRequest("POST", "/api/seo/analyze-competitors", {
-        businessInfo,
-        location,
-        competitors
+      const response = await apiRequest("/api/seo/analyze-competitors", {
+        method: "POST",
+        data: {
+          businessInfo,
+          location,
+          competitors
+        }
       });
       
       const result = await response.json();

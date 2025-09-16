@@ -108,20 +108,17 @@ export function ContentCalendar() {
 
   const { toast } = useToast();
 
-  // Get available locations
-  const { data: locations = [], isLoading: isLoadingLocations } = useQuery({
+  // Get available locations - use proper URL construction
+  const { data: locations = [], isLoading: isLoadingLocations, error: locationsError } = useQuery({
     queryKey: ['/api/locations'],
-    queryFn: async () => {
-      const response = await apiRequest('/api/locations');
-      return response as Array<{
-        id: string;
-        name: string;
-        businessName: string;
-        city: string;
-        state: string;
-      }>;
-    }
-  });
+    staleTime: 0
+  }) as { data: Array<{
+    id: string;
+    name: string;
+    businessName: string;
+    city: string;
+    state: string;
+  }>, isLoading: boolean, error: any };
 
   // Initialize selectedLocation with first available location
   useEffect(() => {
@@ -130,24 +127,35 @@ export function ContentCalendar() {
     }
   }, [locations, selectedLocation]);
 
+  // Invalidate stale cache on mount
+  useEffect(() => {
+    queryClient.invalidateQueries({ 
+      predicate: q => Array.isArray(q.queryKey) && q.queryKey.length > 0 && String(q.queryKey[0]).includes('/api/content-calendar/posts')
+    });
+  }, []);
+
   // Get calendar posts for current month (only if location is selected)
-  const { data: posts = [], isLoading } = useQuery({
-    queryKey: ['/api/content-calendar/posts', selectedLocation, selectedMonth, selectedYear, filterPlatform, filterStatus],
-    queryFn: async () => {
-      if (!selectedLocation) return [];
-      
-      const params = new URLSearchParams({
-        month: selectedMonth.toString(),
-        year: selectedYear.toString()
-      });
-      if (filterPlatform !== 'all') params.append('platform', filterPlatform);
-      if (filterStatus !== 'all') params.append('status', filterStatus);
-      
-      const response = await apiRequest(`/api/content-calendar/posts/${selectedLocation}?${params}`);
-      return response as ContentPost[];
-    },
+  // Construct proper URL that matches backend endpoint: /api/content-calendar/posts/:locationId?month=X&year=Y&platform=Z&status=W
+  const postsQueryParams = new URLSearchParams();
+  postsQueryParams.append('month', selectedMonth.toString());
+  postsQueryParams.append('year', selectedYear.toString());
+  if (filterPlatform !== 'all') postsQueryParams.append('platform', filterPlatform);
+  if (filterStatus !== 'all') postsQueryParams.append('status', filterStatus);
+  
+  const { data: postsResponse, isLoading, error: postsError } = useQuery({
+    queryKey: [`/api/content-calendar/posts/${selectedLocation}?${postsQueryParams.toString()}`],
+    staleTime: 0,
     enabled: !!selectedLocation
   });
+  
+  // Extract posts array from response, handling both formats
+  const posts = (() => {
+    if (!postsResponse) return [];
+    if (Array.isArray(postsResponse)) return postsResponse as ContentPost[];
+    if (postsResponse && Array.isArray(postsResponse.posts)) return postsResponse.posts as ContentPost[];
+    console.warn('Unexpected posts response format:', postsResponse);
+    return [];
+  })();
 
   // Generate content calendar mutation
   const generateCalendarMutation = useMutation({
@@ -160,20 +168,21 @@ export function ContentCalendar() {
     }) => {
       const response = await apiRequest('/api/content-calendar/generate', {
         method: 'POST',
-        body: JSON.stringify({
+        data: {
           locationId: selectedLocation,
           month: selectedMonth,
           year: selectedYear,
           ...params
-        })
+        }
       });
-      return response as ContentCalendarResponse;
+      return (await response.json()) as ContentCalendarResponse;
     },
     onSuccess: (data) => {
       // Backend now handles saving posts automatically
-      // Invalidate only the specific query for current location/month/year to prevent infinite loops
+      // Invalidate all content calendar queries for current location to refresh data
       queryClient.invalidateQueries({ 
-        queryKey: ['/api/content-calendar/posts', selectedLocation, selectedMonth, selectedYear]
+        predicate: q => Array.isArray(q.queryKey) && q.queryKey.length > 0 && 
+                        String(q.queryKey[0]).includes(`/api/content-calendar/posts/${selectedLocation}`)
       });
       toast({
         title: "Calendario generado",
@@ -192,15 +201,17 @@ export function ContentCalendar() {
   // Update post status mutation
   const updatePostStatusMutation = useMutation({
     mutationFn: async ({ postId, status }: { postId: string; status: string }) => {
-      return apiRequest(`/api/content-calendar/posts/${postId}/status`, {
+      const response = await apiRequest(`/api/content-calendar/posts/${postId}/status`, {
         method: 'PATCH',
-        body: JSON.stringify({ postId, status })
+        data: { postId, status }
       });
+      return await response.json();
     },
     onSuccess: () => {
-      // Invalidate only the specific query for current location/month/year to prevent infinite loops
+      // Invalidate all content calendar queries for current location to refresh data
       queryClient.invalidateQueries({ 
-        queryKey: ['/api/content-calendar/posts', selectedLocation, selectedMonth, selectedYear]
+        predicate: q => Array.isArray(q.queryKey) && q.queryKey.length > 0 && 
+                        String(q.queryKey[0]).includes(`/api/content-calendar/posts/${selectedLocation}`)
       });
       toast({
         title: "Estado actualizado",

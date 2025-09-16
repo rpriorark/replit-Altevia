@@ -175,9 +175,12 @@ export function PredictiveReputation() {
   const runAnalysisMutation = useMutation({
     mutationFn: async () => {
       const windowDays = timeRange === '30d' ? 30 : timeRange === '90d' ? 90 : 180;
-      const response = await apiRequest('POST', '/api/reputation/run', {
-        locationId: selectedLocation,
-        windowDays
+      const response = await apiRequest('/api/reputation/run', {
+        method: 'POST',
+        data: {
+          locationId: selectedLocation,
+          windowDays
+        }
       });
       return await response.json();
     },
@@ -202,7 +205,9 @@ export function PredictiveReputation() {
   // Acknowledge alert mutation
   const acknowledgeAlertMutation = useMutation({
     mutationFn: async ({ alertId }: { alertId: string }) => {
-      const response = await apiRequest('POST', `/api/reputation/alerts/${alertId}/ack`, {});
+      const response = await apiRequest(`/api/reputation/alerts/${alertId}/ack`, {
+        method: 'POST'
+      });
       return await response.json();
     },
     onSuccess: () => {
@@ -217,8 +222,9 @@ export function PredictiveReputation() {
   // Update threshold mutation
   const updateThresholdMutation = useMutation({
     mutationFn: async ({ threshold }: { threshold: number }) => {
-      const response = await apiRequest('PUT', `/api/reputation/thresholds/${selectedLocation}`, {
-        threshold
+      const response = await apiRequest(`/api/reputation/thresholds/${selectedLocation}`, {
+        method: 'PUT',
+        data: { threshold }
       });
       return await response.json();
     },
@@ -241,8 +247,9 @@ export function PredictiveReputation() {
   // Bulk acknowledge alerts mutation
   const bulkAcknowledgeAlertsMutation = useMutation({
     mutationFn: async ({ alertIds }: { alertIds: string[] }) => {
-      const response = await apiRequest('POST', '/api/reputation/alerts/acknowledge', {
-        alertIds
+      const response = await apiRequest('/api/reputation/alerts/acknowledge', {
+        method: 'POST',
+        data: { alertIds }
       });
       return await response.json();
     },
