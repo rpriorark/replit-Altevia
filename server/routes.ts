@@ -1,11 +1,13 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import path from "path";
 import { storage } from "./storage";
 import { openaiService } from "./services/openai";
 import { ReputationAnalysisService, type RiskScoreComponents } from "./services/reputation";
 import { mercadoPagoService } from "./services/mercadopago";
 import { sendEmail, sendTrialSignupNotification, sendWelcomeEmail } from "./services/email";
 import { AuthService } from "./services/auth";
+import { ReportGeneratorService, ReportData } from "./services/reportGenerator";
 import { 
   generateSEOContentSchema, 
   generateGMBPostSchema, 
@@ -2160,20 +2162,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create export record
       const reportExport = await storage.createReportExport(exportData);
       
-      // Mock report generation - in production, this would generate actual PDF/Excel
-      const reportUrl = `${process.env.BASE_URL || 'http://localhost:5000'}/api/reports/download/${reportExport.id}`;
-      
-      // Update with generated URL
-      const updatedExport = await storage.updateReportExport(reportExport.id, {
-        fileUrl: reportUrl,
-        status: 'completed'
-      });
+      try {
+        // Generate sample report data - in production, this would come from real analytics
+        const reportData: ReportData = {
+          businessName: exportData.businessName || 'Mi Negocio',
+          location: exportData.location || 'Ciudad, Estado',
+          dateRange: {
+            from: exportData.dateFrom || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            to: exportData.dateTo || new Date().toISOString().split('T')[0]
+          },
+          metrics: {
+            totalReviews: 127,
+            averageRating: 4.3,
+            reviewTrend: 15.2,
+            responseRate: 87,
+            avgResponseTime: 2.5,
+            positivePercentage: 73,
+            negativePercentage: 12,
+            neutralPercentage: 15
+          },
+          reviewSources: [
+            { source: 'Google', reviewCount: 89, averageRating: 4.4 },
+            { source: 'Facebook', reviewCount: 23, averageRating: 4.1 },
+            { source: 'TripAdvisor', reviewCount: 15, averageRating: 4.2 }
+          ],
+          monthlyData: [
+            { month: 'Enero', reviews: 18, rating: 4.2 },
+            { month: 'Febrero', reviews: 22, rating: 4.3 },
+            { month: 'Marzo', reviews: 31, rating: 4.4 },
+            { month: 'Abril', reviews: 28, rating: 4.3 },
+            { month: 'Mayo', reviews: 28, rating: 4.3 }
+          ],
+          competitorAnalysis: {
+            competitors: [
+              { name: 'Competidor A', averageRating: 4.1, totalReviews: 95 },
+              { name: 'Competidor B', averageRating: 3.9, totalReviews: 67 },
+              { name: 'Competidor C', averageRating: 4.2, totalReviews: 134 }
+            ]
+          }
+        };
 
-      res.json({
-        message: "Report export generated successfully",
-        export: updatedExport,
-        downloadUrl: reportUrl
-      });
+        // Generate the actual file
+        const filePath = await ReportGeneratorService.generateReport(exportData.format, reportData, reportExport.id);
+        const fileName = path.basename(filePath);
+        const reportUrl = `${process.env.BASE_URL || 'http://localhost:5000'}/api/reports/download/${reportExport.id}`;
+        
+        // Update with generated URL and file path
+        const updatedExport = await storage.updateReportExport(reportExport.id, {
+          fileUrl: reportUrl,
+          fileName: fileName,
+          status: 'completed'
+        });
+
+        res.json({
+          message: "Report export generated successfully",
+          export: updatedExport,
+          downloadUrl: reportUrl
+        });
+      } catch (generateError) {
+        console.error("Error generating report file:", generateError);
+        
+        // Update status to failed
+        await storage.updateReportExport(reportExport.id, {
+          status: 'failed'
+        });
+        
+        res.status(500).json({
+          error: "Failed to generate report file",
+          details: generateError instanceof Error ? generateError.message : "Unknown error"
+        });
+      }
     } catch (error) {
       console.error("Error generating report export:", error);
       res.status(500).json({
@@ -2211,12 +2269,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Mock download - in production, serve actual file
-      res.json({
-        message: "Report download initiated",
-        export: reportExport,
-        mockData: "This would be the actual file content in production"
-      });
+      // Serve the actual file
+      const reportsDir = ReportGeneratorService.getReportsDirectory();
+      const filePath = path.join(reportsDir, reportExport.fileName || `reporte_${exportId}.${reportExport.format === 'pdf' ? 'pdf' : 'xlsx'}`);
+      
+      // Check if file exists
+      try {
+        const fs = await import('fs-extra');
+        const fileExists = await fs.pathExists(filePath);
+        
+        if (!fileExists) {
+          return res.status(404).json({
+            error: "File not found",
+            details: "The report file has been deleted or moved"
+          });
+        }
+
+        // Set appropriate headers
+        const fileExtension = reportExport.format === 'pdf' ? 'pdf' : 'xlsx';
+        const contentType = reportExport.format === 'pdf' 
+          ? 'application/pdf' 
+          : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+        
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', `attachment; filename="reporte_${reportExport.businessName || 'altevia'}_${new Date().toISOString().split('T')[0]}.${fileExtension}"`);
+        
+        // Stream the file
+        const fileStream = fs.createReadStream(filePath);
+        fileStream.pipe(res);
+        
+      } catch (fileError) {
+        console.error("Error serving file:", fileError);
+        res.status(500).json({
+          error: "File access error",
+          details: "Unable to access the report file"
+        });
+      }
     } catch (error) {
       console.error("Error downloading report:", error);
       res.status(500).json({
