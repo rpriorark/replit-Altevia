@@ -1627,36 +1627,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/webhooks/mercadopago", async (req, res) => {
     try {
       const signature = req.headers['x-signature'] as string;
+      const timestamp = req.headers['x-request-id'] as string || Date.now().toString();
       const payload = JSON.stringify(req.body);
 
-      // Verify webhook signature
-      if (!mercadoPagoService.verifyWebhookSignature(payload, signature)) {
+      // Verify webhook signature with timestamp
+      if (!mercadoPagoService.verifyWebhookSignature(payload, signature, timestamp)) {
+        console.error('Webhook signature verification failed');
         return res.status(401).json({ error: "Invalid signature" });
       }
 
-      const { type, data } = req.body;
-
-      if (type === 'payment') {
+      // Process the notification using the new method
+      const notification = await mercadoPagoService.processWebhookNotification(req.body);
+      
+      if (notification.type === 'payment') {
         // Handle payment status update
-        const paymentStatus = await mercadoPagoService.getPaymentStatus(data.id);
-        
-        // Update payment record
-        await storage.updatePaymentByMercadoPagoId(data.id, {
-          status: paymentStatus.status,
-          paidAt: paymentStatus.status === 'approved' ? new Date() : null
-        });
+        try {
+          // Update payment record in storage
+          await storage.updatePaymentByMercadoPagoId(notification.id, {
+            status: notification.status,
+            paidAt: notification.status === 'approved' ? new Date() : null
+          });
 
-        // If payment approved, activate subscription
-        if (paymentStatus.status === 'approved') {
-          const payment = await storage.getPaymentByMercadoPagoId(data.id);
-          if (payment) {
-            await storage.updateSubscription(payment.subscriptionId, {
-              status: 'active'
+          // If payment approved, activate subscription
+          if (notification.status === 'approved') {
+            const payment = await storage.getPaymentByMercadoPagoId(notification.id);
+            if (payment) {
+              await storage.updateSubscription(payment.subscriptionId, {
+                status: 'active',
+                currentPeriodStart: new Date(),
+                currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+              });
+
+              console.log(`Subscription ${payment.subscriptionId} activated for payment ${notification.id}`);
+            }
+          } else if (notification.status === 'rejected' || notification.status === 'cancelled') {
+            // Handle failed payments
+            const payment = await storage.getPaymentByMercadoPagoId(notification.id);
+            if (payment) {
+              await storage.updateSubscription(payment.subscriptionId, {
+                status: 'past_due'
+              });
+            }
+          }
+        } catch (storageError) {
+          console.error('Error updating payment/subscription in storage:', storageError);
+          // Continue to respond success to MP to avoid retries
+        }
+      } else if (notification.type === 'subscription') {
+        // Handle subscription status changes (preapproval)
+        try {
+          if (notification.status === 'authorized') {
+            // Subscription approved, activate it
+            await storage.updateSubscriptionByMercadoPagoId(notification.id, {
+              status: 'active',
+              currentPeriodStart: new Date(),
+              currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+            });
+          } else if (notification.status === 'cancelled') {
+            // Subscription cancelled
+            await storage.updateSubscriptionByMercadoPagoId(notification.id, {
+              status: 'cancelled',
+              cancelledAt: new Date()
             });
           }
+        } catch (storageError) {
+          console.error('Error updating subscription in storage:', storageError);
         }
       }
 
+      console.log(`Successfully processed MercadoPago webhook: ${notification.type} ${notification.id}`);
       res.json({ received: true });
     } catch (error) {
       console.error("Error processing MercadoPago webhook:", error);

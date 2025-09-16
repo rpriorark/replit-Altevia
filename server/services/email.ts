@@ -1,12 +1,27 @@
 // Using SendGrid integration for email notifications
 import { MailService } from '@sendgrid/mail';
 
-if (!process.env.SENDGRID_API_KEY) {
-  throw new Error("SENDGRID_API_KEY environment variable must be set");
+const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
+
+if (!SENDGRID_API_KEY) {
+  console.warn("SENDGRID_API_KEY environment variable not set. Email functionality will be disabled.");
 }
 
 const mailService = new MailService();
-mailService.setApiKey(process.env.SENDGRID_API_KEY!);
+
+// Only set API key if it exists and is valid
+if (SENDGRID_API_KEY) {
+  if (SENDGRID_API_KEY.startsWith('SG.')) {
+    mailService.setApiKey(SENDGRID_API_KEY);
+    console.log("SendGrid API key configured successfully");
+  } else {
+    console.warn("SendGrid API key does not start with 'SG.' - email functionality may not work correctly");
+    // Still try to set it in case it's a test key
+    mailService.setApiKey(SENDGRID_API_KEY);
+  }
+} else {
+  console.warn("No SendGrid API key provided - emails will not be sent");
+}
 
 interface EmailParams {
   to: string;
@@ -18,6 +33,11 @@ interface EmailParams {
 
 export async function sendEmail(params: EmailParams): Promise<boolean> {
   try {
+    if (!SENDGRID_API_KEY) {
+      console.warn('Cannot send email - SendGrid API key not configured');
+      return false;
+    }
+
     const mailData: any = {
       to: params.to,
       from: params.from,
@@ -33,6 +53,7 @@ export async function sendEmail(params: EmailParams): Promise<boolean> {
     }
     
     await mailService.send(mailData);
+    console.log(`Email sent successfully to ${params.to}`);
     return true;
   } catch (error) {
     console.error('SendGrid email error:', error);
